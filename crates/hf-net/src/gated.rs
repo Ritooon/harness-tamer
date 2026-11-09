@@ -101,9 +101,8 @@ impl GatedClient {
         // Le dialogue natif est bloquant : on l'exécute hors du runtime async.
         let prompt = Arc::clone(&self.prompt);
         let shown = action.clone();
-        let decision = tokio::task::spawn_blocking(move || prompt.ask(&shown))
-            .await
-            .map_err(|_| NetError::PromptUnavailable)?;
+        let decision =
+            tokio::task::spawn_blocking(move || prompt.ask(&shown)).await.map_err(|_| NetError::PromptUnavailable)?;
 
         entry.decision = Some(match decision {
             Decision::Accepted => JournalDecision::Accepted,
@@ -210,8 +209,7 @@ impl NetSession {
         error: Option<String>,
     ) -> Result<(), NetError> {
         // Les redirections refusées pendant la requête sont journalisées d'abord.
-        let refused: Vec<String> =
-            std::mem::take(&mut *self.blocked.lock().unwrap_or_else(|p| p.into_inner()));
+        let refused: Vec<String> = std::mem::take(&mut *self.blocked.lock().unwrap_or_else(|p| p.into_inner()));
         for target in refused {
             let mut e = JournalEntry::new(&self.action_id, self.kind, JournalEvent::Blocked);
             e.url = Some(target);

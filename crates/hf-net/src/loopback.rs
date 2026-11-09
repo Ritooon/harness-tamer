@@ -23,11 +23,7 @@ pub fn ensure_loopback(url: &Url) -> Result<(), NetError> {
         Some(Host::Ipv6(ip)) => ip.is_loopback(),
         _ => false,
     };
-    if url.scheme() == "http" && loopback {
-        Ok(())
-    } else {
-        Err(NetError::NotLoopback(url.to_string()))
-    }
+    if url.scheme() == "http" && loopback { Ok(()) } else { Err(NetError::NotLoopback(url.to_string())) }
 }
 
 /// Réserve un port libre sur 127.0.0.1 pour y lancer `llama-server`.
@@ -138,8 +134,7 @@ mod tests {
 
     #[test]
     fn debug_output_hides_the_api_key() {
-        let client =
-            LoopbackClient::new(Url::parse("http://127.0.0.1:9000/").unwrap(), Some("secret".into())).unwrap();
+        let client = LoopbackClient::new(Url::parse("http://127.0.0.1:9000/").unwrap(), Some("secret".into())).unwrap();
         assert!(!format!("{client:?}").contains("secret"));
     }
 

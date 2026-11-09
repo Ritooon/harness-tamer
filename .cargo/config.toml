@@ -1,0 +1,4 @@
+[env]
+# Dossier où ts-rs écrit les types TypeScript générés depuis hf-engine
+# (`npm run bindings`). Chemin relatif à la racine du dépôt.
+TS_RS_EXPORT_DIR = { value = "src/bindings", relative = true }

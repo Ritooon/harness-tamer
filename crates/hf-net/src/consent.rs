@@ -118,21 +118,14 @@ pub struct ConsentText {
 
 /// Construit le texte du dialogue dans la langue de l'interface (`"fr"` ou `"en"`).
 pub fn render_consent(action: &NetAction, lang: &str) -> ConsentText {
-    let hosts = action
-        .hosts()
-        .into_iter()
-        .map(|h| format!("  • {h}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let hosts = action.hosts().into_iter().map(|h| format!("  • {h}")).collect::<Vec<_>>().join("\n");
     let size = action.estimated_bytes.map(|b| human_size(b, lang));
     if lang == "en" {
         let mut body = format!("{}\n\nHosts contacted:\n{hosts}", action.purpose);
         if let Some(size) = size {
             body.push_str(&format!("\n\nEstimated size: {size}"));
         }
-        body.push_str(
-            "\n\nNothing else leaves this computer. This access will be recorded in the network log.",
-        );
+        body.push_str("\n\nNothing else leaves this computer. This access will be recorded in the network log.");
         ConsentText {
             title: "Internet access requested".into(),
             body,
@@ -144,9 +137,7 @@ pub fn render_consent(action: &NetAction, lang: &str) -> ConsentText {
         if let Some(size) = size {
             body.push_str(&format!("\n\nTaille estimée : {size}"));
         }
-        body.push_str(
-            "\n\nRien d'autre ne quitte cet ordinateur. Cet accès sera inscrit dans le journal réseau.",
-        );
+        body.push_str("\n\nRien d'autre ne quitte cet ordinateur. Cet accès sera inscrit dans le journal réseau.");
         ConsentText {
             title: "Accès à Internet demandé".into(),
             body,
@@ -165,11 +156,7 @@ pub fn human_size(bytes: u64, lang: &str) -> String {
     } else {
         (bytes as f64 / 1e3, "Ko", "KB")
     };
-    if lang == "en" {
-        format!("{value:.1} {unit_en}")
-    } else {
-        format!("{value:.1} {unit_fr}").replace('.', ",")
-    }
+    if lang == "en" { format!("{value:.1} {unit_en}") } else { format!("{value:.1} {unit_fr}").replace('.', ",") }
 }
 
 #[cfg(test)]

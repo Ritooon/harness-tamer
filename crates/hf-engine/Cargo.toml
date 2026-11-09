@@ -1,0 +1,40 @@
+[package]
+name = "hf-engine"
+description = "Cœur de HarnessForge : projets, stockage, analyse de dépôt, génération, skills, export."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+# Génère les types TypeScript de l'interface (`npm run bindings`).
+ts = ["dep:ts-rs"]
+
+[dependencies]
+hf-net.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+url.workspace = true
+futures-util.workspace = true
+sha2.workspace = true
+# Parcours de dépôt qui respecte .gitignore.
+ignore = "0.4"
+# Décompression zlib des objets Git (lecteur maison en lecture seule, voir scan/git.rs).
+flate2 = "1"
+toml = "1"
+regex = "1"
+similar = "3"
+sysinfo = { version = "0.40", default-features = false, features = ["system"] }
+trash = "5"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+ts-rs = { version = "12", optional = true, features = ["serde-compat"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -120,11 +120,8 @@ impl Journal {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => return Err(e.into()),
         };
-        let mut entries: Vec<JournalEntry> = BufReader::new(file)
-            .lines()
-            .map_while(Result::ok)
-            .filter_map(|l| serde_json::from_str(&l).ok())
-            .collect();
+        let mut entries: Vec<JournalEntry> =
+            BufReader::new(file).lines().map_while(Result::ok).filter_map(|l| serde_json::from_str(&l).ok()).collect();
         entries.reverse();
         entries.truncate(limit);
         Ok(entries)

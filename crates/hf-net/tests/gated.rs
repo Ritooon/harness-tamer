@@ -9,8 +9,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hf_net::{
-    ActionKind, ConsentPrompt, Decision, GatedClient, GatedConfig, Journal, JournalDecision, JournalEvent,
-    NetAction, NetError, NetworkPolicy,
+    ActionKind, ConsentPrompt, Decision, GatedClient, GatedConfig, Journal, JournalDecision, JournalEvent, NetAction,
+    NetError, NetworkPolicy,
 };
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -184,7 +184,11 @@ async fn redirect_to_undeclared_host_is_blocked_and_logged() {
     let (addr, hits) = serve(Arc::new(move |r: &Req| {
         if r.path == "/start" {
             let port = port_for_handler.load(Ordering::SeqCst);
-            Resp { status: 302, headers: vec![("Location".into(), format!("http://localhost:{port}/next"))], body: vec![] }
+            Resp {
+                status: 302,
+                headers: vec![("Location".into(), format!("http://localhost:{port}/next"))],
+                body: vec![],
+            }
         } else {
             Resp::ok(b"should not be reached")
         }
@@ -197,7 +201,9 @@ async fn redirect_to_undeclared_host_is_blocked_and_logged() {
     assert!(result.is_err());
     assert_eq!(hits.load(Ordering::SeqCst), 1, "la cible de la redirection n'est jamais contactée");
     let log = s.journal.read_recent(10).unwrap();
-    assert!(log.iter().any(|e| e.event == JournalEvent::Blocked && e.url.as_deref().unwrap_or("").contains("localhost")));
+    assert!(
+        log.iter().any(|e| e.event == JournalEvent::Blocked && e.url.as_deref().unwrap_or("").contains("localhost"))
+    );
 }
 
 fn sha256_hex(data: &[u8]) -> String {
@@ -214,7 +220,10 @@ fn file_handler(content: Arc<Vec<u8>>) -> Handler {
             }
             return Resp {
                 status: 206,
-                headers: vec![("Content-Range".into(), format!("bytes {start}-{}/{}", content.len() - 1, content.len()))],
+                headers: vec![(
+                    "Content-Range".into(),
+                    format!("bytes {start}-{}/{}", content.len() - 1, content.len()),
+                )],
                 body: content[start..].to_vec(),
             };
         }
