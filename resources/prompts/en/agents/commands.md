@@ -1,0 +1,1 @@
+Give the commands to: install dependencies, run in development, build, run all tests then a single test, lint, format and type-check. When a "Detected commands" list exists, use only those commands and never invent one; write "(to be defined)" for missing ones. End by stating which commands the agent must run before considering a task done.

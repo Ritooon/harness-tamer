@@ -1,0 +1,1 @@
+Describe how the repository is organised: main folders and their role, where new code, tests and documentation go. If useful, add a tree of at most 25 lines in a ```text block. If there is no code yet, propose a structure suited to the stack and mark it "(proposed)".

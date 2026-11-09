@@ -1,0 +1,1 @@
+Décris les conventions de code : nommage (fichiers, variables, types), formatage et indentation, organisation des imports, gestion des erreurs, journalisation, commentaires et documentation, emplacement et nommage des tests. Déduis-les des outils configurés, de la convention de nommage détectée et des documents existants. Ajoute un exemple court quand il lève une ambiguïté.

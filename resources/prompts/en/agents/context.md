@@ -1,0 +1,1 @@
+Describe in 3 to 6 sentences what the project is, who it is for, its platform and target systems. If skills are attached to the project, state in one sentence that they live in `.agents/skills/` and when to use them. Do not list the stack or the commands: other sections cover them.

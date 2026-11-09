@@ -1,0 +1,1 @@
+List what the agent must never do, as "Do not …" lines, each with a short reason. Include at least: editing generated files or vendored dependencies, committing secrets, disabling a test or a lint rule to make CI pass, rewriting shared Git history. Add the project's own prohibitions, especially those that follow from its additional constraints.

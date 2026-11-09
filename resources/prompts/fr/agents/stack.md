@@ -1,0 +1,1 @@
+Liste les langages, frameworks, bibliothèques majeures et outils, chacun avec son rôle. Respecte les technologies imposées. N'indique une version que si elle figure dans le contexte. S'il n'y a pas encore de code, propose une stack cohérente avec la plateforme et les technologies imposées, et marque chaque choix non imposé « (proposé) ».

@@ -1,0 +1,1 @@
+Décris en 3 à 6 phrases ce qu'est le projet, à qui il s'adresse, sa plateforme et ses systèmes cibles. Si des skills sont rattachés au projet, indique en une phrase qu'ils se trouvent dans `.agents/skills/` et quand les utiliser. Ne liste ni la stack ni les commandes : d'autres sections s'en chargent.

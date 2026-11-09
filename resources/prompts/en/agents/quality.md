@@ -1,0 +1,1 @@
+State the rules a change must follow: tests to add or update, error cases covered, lint and formatting clean, strict typing, performance, accessibility when there is a UI, security (inputs, secrets), dependencies (add as few as possible and justify them). End with a "Before handing back" checklist.

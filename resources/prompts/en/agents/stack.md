@@ -1,0 +1,1 @@
+List the languages, frameworks, major libraries and tools, each with its role. Respect the imposed technologies. Give a version only if it appears in the context. If there is no code yet, propose a stack consistent with the platform and the imposed technologies, and mark each choice that is not imposed as "(proposed)".

@@ -25,9 +25,11 @@ pub mod journal;
 pub mod loopback;
 pub mod policy;
 
-pub use consent::{ActionKind, ConsentPrompt, ConsentText, Decision, NetAction, render_consent};
+pub use consent::{
+    ActionKind, ConsentPrompt, ConsentText, Decision, NetAction, host_allowed, human_size, render_consent,
+};
 pub use error::NetError;
-pub use gated::{DownloadReport, GatedClient, GatedConfig, NetSession};
+pub use gated::{DownloadReport, GatedClient, GatedConfig, NetSession, sha256_file};
 pub use journal::{Journal, JournalDecision, JournalEntry, JournalEvent};
 pub use loopback::{LoopbackClient, free_loopback_port};
 pub use policy::NetworkPolicy;

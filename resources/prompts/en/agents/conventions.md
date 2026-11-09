@@ -1,0 +1,1 @@
+Describe the coding conventions: naming (files, variables, types), formatting and indentation, import ordering, error handling, logging, comments and documentation, test location and naming. Infer them from the configured tools, the detected naming convention and the existing documents. Add a short example when it removes an ambiguity.

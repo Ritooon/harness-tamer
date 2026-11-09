@@ -1,0 +1,1 @@
+Décris l'organisation du dépôt : dossiers principaux et leur rôle, où placer le nouveau code, les tests et la documentation. Si c'est utile, ajoute une arborescence de 25 lignes au plus dans un bloc ```text. S'il n'y a pas encore de code, propose une structure adaptée à la stack et signale-la « (proposée) ».

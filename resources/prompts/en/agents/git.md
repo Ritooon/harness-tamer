@@ -1,0 +1,1 @@
+Describe the Git workflow: branch naming, commit message format (Conventional Commits if most of the repository's commits use them), commit size, pull requests (description, review, green CI), merge rules. Base it on the current branch, the recent messages and the detected CI.

@@ -10,7 +10,9 @@
 
 pub mod brand;
 pub mod error;
+pub mod generation;
 pub mod index;
+pub mod llm;
 pub mod model;
 pub mod scan;
 pub mod skills;

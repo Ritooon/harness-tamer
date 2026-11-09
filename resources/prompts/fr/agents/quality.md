@@ -1,0 +1,1 @@
+Énonce les règles qu'un changement doit respecter : tests à ajouter ou mettre à jour, cas d'erreur couverts, lint et formatage sans erreur, typage strict, performances, accessibilité s'il y a une interface, sécurité (entrées, secrets), dépendances (en ajouter le moins possible et le justifier). Termine par une liste de cases à cocher « Avant de rendre la main ».

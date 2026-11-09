@@ -1,0 +1,1 @@
+Décris le workflow Git : nommage des branches, format des messages de commit (Conventional Commits si le dépôt les utilise majoritairement), taille des commits, pull requests (description, revue, CI au vert), règles de fusion. Appuie-toi sur la branche courante, les messages récents et la CI détectée.
