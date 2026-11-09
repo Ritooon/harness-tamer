@@ -18,6 +18,8 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     outDir: "dist",
+    // Application locale : le bundle est lu depuis le disque, pas téléchargé.
+    chunkSizeWarningLimit: 1500,
   },
   test: {
     environment: "jsdom",

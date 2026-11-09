@@ -44,6 +44,7 @@ impl Default for ScanOptions {
 pub struct LanguageStat {
     pub name: String,
     pub files: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub bytes: u64,
 }
 
