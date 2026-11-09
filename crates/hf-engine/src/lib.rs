@@ -10,6 +10,7 @@
 
 pub mod brand;
 pub mod error;
+pub mod export;
 pub mod generation;
 pub mod index;
 pub mod llm;
