@@ -1,0 +1,14 @@
+# Garde-fou de la garantie hors-ligne (ADR 0002, verrou n°2).
+# Seul le crate hf-net lève ces interdictions, avec un #![allow] explicite et commenté.
+disallowed-types = [
+  { path = "std::net::TcpStream", reason = "toute connexion passe par hf-net" },
+  { path = "std::net::TcpListener", reason = "toute socket passe par hf-net" },
+  { path = "std::net::UdpSocket", reason = "toute socket passe par hf-net" },
+  { path = "tokio::net::TcpStream", reason = "toute connexion passe par hf-net", allow-invalid = true },
+  { path = "tokio::net::TcpListener", reason = "toute socket passe par hf-net", allow-invalid = true },
+  { path = "tokio::net::UdpSocket", reason = "toute socket passe par hf-net", allow-invalid = true },
+]
+disallowed-methods = [
+  { path = "std::process::Command::new", reason = "aucun processus externe hors du lanceur llama-server" },
+  { path = "tokio::process::Command::new", reason = "aucun processus externe hors du lanceur llama-server", allow-invalid = true },
+]

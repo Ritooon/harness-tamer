@@ -1,0 +1,26 @@
+[package]
+name = "hf-net"
+description = "Seul point d'accès réseau de HarnessForge : consentement, journal, client local."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+# native-tls : utilise la pile TLS du système (SChannel, Security.framework, OpenSSL).
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream", "json", "http2"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+url.workspace = true
+futures-util.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
