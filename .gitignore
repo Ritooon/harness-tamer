@@ -2,8 +2,8 @@
 node_modules/
 /dist
 /src-tauri/target
-/src-tauri/binaries/*
-!/src-tauri/binaries/.gitkeep
+/src-tauri/resources/llama/*
+!/src-tauri/resources/llama/README.md
 /src-tauri/gen/schemas
 /.cache
 *.gguf

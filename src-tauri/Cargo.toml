@@ -1,0 +1,30 @@
+[package]
+name = "harnessforge"
+description = "HarnessForge : génère AGENTS.md et skills pour agents de code, avec un modèle local."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "harnessforge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+hf-net.workspace = true
+hf-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+url.workspace = true
+# Pas de plugin HTTP ni de mise à jour automatique (ADR 0002, verrous 4 et 7).
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+
+[lints]
+workspace = true

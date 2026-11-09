@@ -9,6 +9,7 @@
 //! `llama-server`). Le script `scripts/check-network-deps.mjs` le vérifie.
 
 pub mod brand;
+pub mod diff;
 pub mod error;
 pub mod export;
 pub mod generation;

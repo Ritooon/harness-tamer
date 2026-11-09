@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/hf-net", "crates/hf-engine"]
+members = ["crates/hf-net", "crates/hf-engine", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

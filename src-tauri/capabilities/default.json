@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Fenêtre principale : IPC de l'application et fonctions de base de la fenêtre. Aucune permission shell, HTTP, système de fichiers, dialogue ou ouverture de lien n'est donnée à l'interface : ces actions passent par des commandes Rust.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
