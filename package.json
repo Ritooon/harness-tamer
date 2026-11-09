@@ -17,7 +17,9 @@
     "tauri": "tauri",
     "bindings": "cargo test -p hf-engine --features ts export_bindings",
     "check:network": "node scripts/check-network-deps.mjs",
-    "fetch:llama": "node scripts/fetch-llama.mjs"
+    "fetch:llama": "node scripts/fetch-llama.mjs",
+    "test:scripts": "node --test scripts/fetch-llama.test.mjs",
+    "package": "node scripts/package.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.2",

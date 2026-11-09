@@ -1,0 +1,110 @@
+# Intégration continue de HarnessForge.
+#
+# checks  : garde-fou réseau, format, clippy, tests Rust (dont une seconde
+#           passe dans un espace de noms réseau vide, pour prouver que le cœur
+#           n'a besoin d'aucun accès), tests et build de l'interface.
+# bundle  : installeurs des trois systèmes, sur étiquette v* ou à la demande.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dépendances système de Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev build-essential file
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Garde-fou réseau (aucune bibliothèque réseau hors hf-net)
+        run: pnpm check:network
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: Tests du cœur sans aucun réseau (espace de noms isolé)
+        run: |
+          # Ubuntu 24.04 restreint les espaces de noms non privilégiés.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          cargo test --offline -p hf-engine -p hf-net --no-run
+          unshare -rn sh -c 'ip link set lo up && cargo test --offline -p hf-engine -p hf-net'
+
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:scripts
+      - run: pnpm build
+
+  bundle:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04 : glibc plus ancienne, paquets compatibles avec plus de distributions.
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dépendances système de Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev build-essential file
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: llama-server (version et empreintes fixées dans scripts/llama.lock.json)
+        run: node scripts/fetch-llama.mjs --target ${{ matrix.target }}
+      - name: Installeurs
+        run: node scripts/package.mjs --skip-checks --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harnessforge-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/**/*.deb
+            target/${{ matrix.target }}/release/bundle/**/*.rpm
+            target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            target/${{ matrix.target }}/release/bundle/**/*.dmg
+            target/${{ matrix.target }}/release/bundle/**/*.exe
+            target/${{ matrix.target }}/release/bundle/**/*.msi
+            target/${{ matrix.target }}/release/bundle/SHA256SUMS
+          if-no-files-found: error

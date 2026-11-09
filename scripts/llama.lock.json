@@ -1,0 +1,18 @@
+{
+  "$comment": "Version de llama.cpp livrée avec HarnessForge. Les champs file et sha256 sont remplis au premier téléchargement (node scripts/fetch-llama.mjs --update-lock) puis versionnés : les builds suivants vérifient l'empreinte et échouent si elle change.",
+  "repo": "ggml-org/llama.cpp",
+  "tag": "v0.9.0",
+  "targets": {
+    "linux-x64/cpu": [{ "pattern": "-bin-ubuntu-x64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
+    "linux-x64/vulkan": [{ "pattern": "-bin-ubuntu-vulkan-x64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
+    "linux-arm64/cpu": [{ "pattern": "-bin-ubuntu-arm64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
+    "macos-arm64/metal": [{ "pattern": "-bin-macos-arm64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
+    "macos-x64/cpu": [{ "pattern": "-bin-macos-x64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
+    "win-x64/cpu": [{ "pattern": "-bin-win-cpu-x64\\.zip$", "file": null, "sha256": null }],
+    "win-x64/vulkan": [
+      { "pattern": "-bin-win-cpu-x64\\.zip$", "file": null, "sha256": null },
+      { "pattern": "-bin-win-vulkan-x64\\.zip$", "file": null, "sha256": null }
+    ],
+    "win-arm64/cpu": [{ "pattern": "-bin-win-cpu-arm64\\.zip$", "file": null, "sha256": null }]
+  }
+}
