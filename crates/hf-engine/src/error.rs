@@ -21,6 +21,8 @@ pub enum EngineError {
     ModelNotReady,
     #[error("model runtime error: {0}")]
     Runtime(String),
+    #[error("could not install the llama.cpp engine: {0}")]
+    RuntimeInstall(String),
     #[error("the model returned an unusable answer: {0}")]
     BadModelOutput(String),
     #[error("operation cancelled")]
@@ -44,6 +46,7 @@ impl EngineError {
             EngineError::ExportTargetExists(_) => "export.target_exists",
             EngineError::ModelNotReady => "model.not_ready",
             EngineError::Runtime(_) => "model.runtime",
+            EngineError::RuntimeInstall(_) => "runtime.install",
             EngineError::BadModelOutput(_) => "model.bad_output",
             EngineError::Cancelled => "cancelled",
             EngineError::Net(e) => e.code(),

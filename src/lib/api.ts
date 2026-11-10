@@ -10,6 +10,7 @@ import type { GenerationResult } from "../bindings/GenerationResult";
 import type { GenEvent } from "../bindings/GenEvent";
 import type { ImportedModel } from "../bindings/ImportedModel";
 import type { ImportedSkill } from "../bindings/ImportedSkill";
+import type { InstalledRuntime } from "../bindings/InstalledRuntime";
 import type { Issue } from "../bindings/Issue";
 import type { ModelStatus } from "../bindings/ModelStatus";
 import type { OnlineSkill } from "../bindings/OnlineSkill";
@@ -32,6 +33,7 @@ import type {
   ExportKind,
   JournalEntry,
   ProjectDetail,
+  RuntimeLocation,
   RuntimeStatus,
   SystemInfo,
   TextEvent,
@@ -39,6 +41,11 @@ import type {
 
 export function isCmdError(e: unknown): e is CmdError {
   return typeof e === "object" && e !== null && "code" in e && "message" in e;
+}
+
+/** Le moteur llama.cpp manque : l'interface propose alors de l'installer. */
+export function isEngineMissing(e: unknown): boolean {
+  return isCmdError(e) && e.code === "runtime.missing";
 }
 
 function channel<T>(onMessage: (event: T) => void): Channel<T> {
@@ -109,6 +116,10 @@ export const api = {
   forgetModel: (modelId: string) => invoke<void>("forget_model", { modelId }),
   runtimeStatus: () => invoke<RuntimeStatus>("runtime_status"),
   runtimeLog: () => invoke<string[]>("runtime_log"),
+  locateRuntime: () => invoke<RuntimeLocation>("locate_runtime"),
+  installLlamaRuntime: (onProgress: (p: DownloadProgress) => void) =>
+    invoke<InstalledRuntime>("install_llama_runtime", { onProgress: channel(onProgress) }),
+  pickLlamaServer: () => invoke<string | null>("pick_llama_server"),
   startRuntime: () => invoke<RuntimeStatus>("start_runtime"),
   stopRuntime: () => invoke<RuntimeStatus>("stop_runtime"),
   readNetworkLog: (limit: number) => invoke<JournalEntry[]>("read_network_log", { limit }),

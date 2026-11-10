@@ -5,11 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { Skill } from "../../bindings/Skill";
 import type { SkillFile } from "../../bindings/SkillFile";
 import type { SkillMeta } from "../../bindings/SkillMeta";
+import { EngineInstall } from "../../components/EngineInstall";
 import { SkillEditor } from "../../components/SkillEditor";
 import { StreamView } from "../../components/StreamView";
 import { Banner, Button, Empty, Field, Modal } from "../../components/ui";
 import { useI18n } from "../../i18n";
-import { api } from "../../lib/api";
+import { api, isEngineMissing } from "../../lib/api";
 import type { ProjectDetail, TextEvent } from "../../lib/types";
 
 type Draft = { slug: string; content: string; files: SkillFile[]; adapted: boolean; warnings: string[] };
@@ -23,6 +24,7 @@ export function ProjectSkillsTab({ detail, onChanged }: { detail: ProjectDetail;
   const [draft, setDraft] = useState<Draft | null>(null);
   const [adapting, setAdapting] = useState<{ slug: string; instruction: string; running: boolean; text: string; reasoning: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [engineMissing, setEngineMissing] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -62,6 +64,7 @@ export function ProjectSkillsTab({ detail, onChanged }: { detail: ProjectDetail;
     } catch (e) {
       setAdapting((a) => a && { ...a, running: false });
       setError(err(e));
+      setEngineMissing(isEngineMissing(e));
     }
   };
 
@@ -152,6 +155,12 @@ export function ProjectSkillsTab({ detail, onChanged }: { detail: ProjectDetail;
               </Button>
             )}
           </div>
+          {error && (
+            <Banner kind="error">
+              <p>{error}</p>
+              {engineMissing && <EngineInstall onInstalled={() => (setError(null), setEngineMissing(false))} />}
+            </Banner>
+          )}
           {(adapting.running || adapting.text) && <StreamView text={adapting.text} reasoning={adapting.reasoning} />}
         </Modal>
       )}

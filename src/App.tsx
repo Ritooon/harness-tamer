@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { Settings } from "./bindings/Settings";
+import { EngineInstall } from "./components/EngineInstall";
 import { Banner } from "./components/ui";
 import { errorMessage, I18nProvider, useI18n } from "./i18n";
 import { api } from "./lib/api";
@@ -47,7 +48,7 @@ function useRuntimeStatus(): RuntimeStatus {
 }
 
 function Shell({ settings, onSettings }: { settings: Settings; onSettings: (s: Settings) => void }) {
-  const { t } = useI18n();
+  const { t, err } = useI18n();
   const route = useRoute();
   const status = useRuntimeStatus();
   const section = route.name === "skills" ? "skills" : route.name === "settings" ? "settings" : "projects";
@@ -86,7 +87,12 @@ function Shell({ settings, onSettings }: { settings: Settings; onSettings: (s: S
         </div>
       </aside>
       <main id="main" className="main">
-        {status.state === "failed" && route.name !== "settings" && <Banner kind="error">{status.message}</Banner>}
+        {status.state === "failed" && route.name !== "settings" && (
+          <Banner kind="error">
+            <p>{err({ code: status.code, message: status.message })}</p>
+            {status.code === "runtime.missing" && <EngineInstall />}
+          </Banner>
+        )}
         <Page route={route} settings={settings} onSettings={onSettings} />
       </main>
     </div>

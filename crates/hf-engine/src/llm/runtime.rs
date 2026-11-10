@@ -7,7 +7,8 @@
 //! n'apparaît donc pas dans la liste des processus), `--offline` (aucun
 //! téléchargement possible) et `--no-webui`.
 
-use std::path::Path;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use hf_net::LoopbackClient;
@@ -18,8 +19,100 @@ use super::catalog::ResolvedModel;
 use crate::error::{EngineError, Result};
 use crate::model::RuntimeSettings;
 
-/// Nom du binaire embarqué (sidecar Tauri, suffixé par la cible à la compilation).
+/// Nom du programme de llama.cpp qui sert le modèle.
 pub const SERVER_BINARY: &str = "llama-server";
+
+/// D'où vient le `llama-server` utilisé.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum ServerSource {
+    /// Choisi dans les réglages.
+    Settings,
+    /// Déposé dans `<données>/runtimes/llama/` (build CUDA, Vulkan…).
+    UserRuntime,
+    /// Livré avec l'application.
+    Bundled,
+    /// Téléchargé par l'application, sur demande (`<données>/runtimes/llama-cpp/`).
+    Downloaded,
+    /// Installé sur le système (Homebrew, gestionnaire de paquets, PATH).
+    System,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ServerCandidate {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub path: PathBuf,
+    pub source: ServerSource,
+}
+
+/// Emplacements où chercher `llama-server`, du plus prioritaire au moins
+/// prioritaire. Aucune commande n'est lancée : seuls des chemins sont lus.
+pub struct ServerSearch<'a> {
+    /// Chemin choisi dans les réglages.
+    pub configured: Option<&'a Path>,
+    /// `<données>/runtimes/llama`.
+    pub user_dir: &'a Path,
+    /// Dossier `llama` des ressources de l'application.
+    pub bundled_dir: Option<&'a Path>,
+    /// Dossier géré par l'installation en un clic (voir `llm::install`).
+    pub downloaded_dir: Option<&'a Path>,
+    /// Valeur de la variable `PATH`.
+    pub path_env: Option<&'a OsStr>,
+    /// `std::env::consts::OS`.
+    pub os: &'a str,
+}
+
+impl ServerSearch<'_> {
+    pub fn candidates(&self) -> Vec<ServerCandidate> {
+        let exe = if self.os == "windows" { format!("{SERVER_BINARY}.exe") } else { SERVER_BINARY.to_owned() };
+        let mut out = Vec::new();
+        let mut push = |path: PathBuf, source| {
+            if !out.iter().any(|c: &ServerCandidate| c.path == path) {
+                out.push(ServerCandidate { path, source });
+            }
+        };
+        if let Some(p) = self.configured {
+            push(p.to_path_buf(), ServerSource::Settings);
+        }
+        push(self.user_dir.join(&exe), ServerSource::UserRuntime);
+        if let Some(dir) = self.bundled_dir {
+            push(dir.join(&exe), ServerSource::Bundled);
+        }
+        if let Some(dir) = self.downloaded_dir {
+            push(dir.join(&exe), ServerSource::Downloaded);
+        }
+        // Une application lancée depuis le Finder n'hérite pas du PATH du
+        // terminal : les emplacements usuels sont ajoutés explicitement.
+        let extra: &[&str] = match self.os {
+            "macos" => &["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"],
+            "linux" => &["/usr/local/bin", "/usr/bin", "/snap/bin"],
+            _ => &[],
+        };
+        let path_dirs = self.path_env.map(|p| std::env::split_paths(p).collect::<Vec<_>>()).unwrap_or_default();
+        for dir in path_dirs.into_iter().chain(extra.iter().map(PathBuf::from)) {
+            if dir.is_absolute() {
+                push(dir.join(&exe), ServerSource::System);
+            }
+        }
+        out
+    }
+
+    /// Premier `llama-server` existant, ou la liste des chemins essayés.
+    pub fn locate(&self) -> std::result::Result<ServerCandidate, Vec<PathBuf>> {
+        let candidates = self.candidates();
+        // Un chemin choisi à la main qui n'existe plus est une erreur, pas un
+        // prétexte pour en prendre un autre en silence.
+        if let Some(first) = candidates.first().filter(|c| c.source == ServerSource::Settings) {
+            return if first.path.is_file() { Ok(first.clone()) } else { Err(vec![first.path.clone()]) };
+        }
+        match candidates.iter().find(|c| c.path.is_file()) {
+            Some(found) => Ok(found.clone()),
+            None => Err(candidates.into_iter().map(|c| c.path).collect()),
+        }
+    }
+}
 
 /// Adresse locale d'Ollama, s'il est utilisé à la place du moteur embarqué.
 pub const OLLAMA_BASE: &str = "http://127.0.0.1:11434/";
@@ -103,6 +196,69 @@ mod tests {
             thinking: ThinkingControl::ChatTemplateKwargs,
             moe,
         }
+    }
+
+    fn search<'a>(
+        configured: Option<&'a Path>,
+        user: &'a Path,
+        bundled: &'a Path,
+        path_env: &'a OsStr,
+    ) -> ServerSearch<'a> {
+        ServerSearch {
+            configured,
+            user_dir: user,
+            bundled_dir: Some(bundled),
+            downloaded_dir: None,
+            path_env: Some(path_env),
+            os: "linux",
+        }
+    }
+
+    #[test]
+    fn server_search_order_and_fallbacks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (user, bundled, system) = (tmp.path().join("user"), tmp.path().join("bundled"), tmp.path().join("bin"));
+        for dir in [&user, &bundled, &system] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        let path_env = std::env::join_paths([system.clone(), PathBuf::from("relatif")]).unwrap();
+
+        // Rien d'installé : l'erreur liste les chemins essayés, dans l'ordre.
+        let tried = search(None, &user, &bundled, &path_env).locate().unwrap_err();
+        assert_eq!(tried[..3], [user.join("llama-server"), bundled.join("llama-server"), system.join("llama-server")]);
+        assert!(!tried.contains(&PathBuf::from("/opt/homebrew/bin/llama-server")), "linux : pas de Homebrew");
+        assert!(!tried.iter().any(|p| p.starts_with("relatif")), "un PATH relatif est ignoré");
+
+        // Installation système trouvée, puis supplantée par la build livrée.
+        std::fs::write(system.join("llama-server"), "").unwrap();
+        assert_eq!(search(None, &user, &bundled, &path_env).locate().unwrap().source, ServerSource::System);
+        std::fs::write(bundled.join("llama-server"), "").unwrap();
+        assert_eq!(search(None, &user, &bundled, &path_env).locate().unwrap().source, ServerSource::Bundled);
+
+        // Un chemin choisi à la main passe en premier, et n'est jamais remplacé en silence.
+        let chosen = tmp.path().join("chosen-llama-server");
+        assert_eq!(search(Some(&chosen), &user, &bundled, &path_env).locate().unwrap_err(), vec![chosen.clone()]);
+        std::fs::write(&chosen, "").unwrap();
+        assert_eq!(search(Some(&chosen), &user, &bundled, &path_env).locate().unwrap().source, ServerSource::Settings);
+    }
+
+    #[test]
+    fn server_search_knows_homebrew_and_windows_names() {
+        let user = Path::new("/u");
+        let downloaded = Path::new("/d");
+        let base = ServerSearch {
+            configured: None,
+            user_dir: user,
+            bundled_dir: None,
+            downloaded_dir: Some(downloaded),
+            path_env: None,
+            os: "macos",
+        };
+        let mac = base.candidates();
+        assert_eq!(mac[1], ServerCandidate { path: downloaded.join("llama-server"), source: ServerSource::Downloaded });
+        assert!(mac.iter().any(|c| c.path == Path::new("/opt/homebrew/bin/llama-server")));
+        let win = ServerSearch { os: "windows", ..base };
+        assert_eq!(win.candidates()[0].path, user.join("llama-server.exe"));
     }
 
     #[test]

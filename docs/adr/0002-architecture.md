@@ -57,7 +57,7 @@ Voir `crates/hf-engine/src/store.rs` pour la référence exacte. Arborescence :
 ├── settings.json
 ├── network.log.jsonl
 ├── models/            catalog.json + *.gguf
-├── runtimes/          builds optionnels (CUDA)
+├── runtimes/          llama/ (build de l'utilisateur), llama-cpp/ (installé par l'app)
 ├── skills/<slug>/     skill.json, SKILL.md, ressources
 └── projects/<uuid>/
     ├── project.json

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { defaultVariant, hostPlatform, install, isShipped, pickAsset, resolveTargetKey } from "./fetch-llama.mjs";
+import { alreadyInstalled, defaultVariant, hostPlatform, install, isShipped, pickAsset, resolveTargetKey } from "./fetch-llama.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./fetch-llama.mjs", import.meta.url));
 
@@ -46,7 +46,9 @@ test("installation depuis une archive extraite", () => {
   for (const f of ["llama-server", "llama-cli", "libllama.so", "libggml-base.so"]) writeFileSync(join(bin, f), f);
   writeFileSync(join(dir, "x", "LICENSE"), "MIT");
   const dest = join(dir, "dest");
-  assert.deepEqual(install(join(dir, "x"), dest), ["LICENSE", "libggml-base.so", "libllama.so", "llama-server"]);
+  mkdirSync(join(dir, "x", "build", "lib"));
+  writeFileSync(join(dir, "x", "build", "lib", "libmtmd.so"), "lib");
+  assert.deepEqual(install(join(dir, "x"), dest), ["LICENSE", "libggml-base.so", "libllama.so", "libmtmd.so", "llama-server"]);
   assert.ok(!existsSync(join(dest, "llama-cli")));
 });
 
@@ -76,4 +78,21 @@ test("bout en bout avec une archive locale et une empreinte vérifiée", { skip:
   assert.equal(JSON.parse(readFileSync(join(dest, "VERSION.json"), "utf8")).tag, "vX");
 
   assert.throws(() => run("0".repeat(64)), /empreinte SHA-256 incorrecte/);
+  assert.ok(alreadyInstalled(dest, "vX", "linux-x64/cpu"), "une archive refusée ne touche pas à l'installation en place");
+
+  // --if-missing : la bonne version est déjà là, rien n'est refait (même avec une empreinte fausse).
+  run(sha256);
+  writeFileSync(join(dir, "lock.json"), JSON.stringify(lock("0".repeat(64))));
+  execFileSync("node", [SCRIPT, "--target", "x86_64-unknown-linux-gnu", "--from", archive, "--if-missing"], {
+    env: { ...process.env, HF_LLAMA_LOCK: join(dir, "lock.json"), HF_LLAMA_DEST: dest },
+    stdio: "pipe",
+  });
+  assert.ok(alreadyInstalled(dest, "vX", "linux-x64/cpu"));
+  assert.ok(!alreadyInstalled(dest, "vX", "linux-x64/vulkan") && alreadyInstalled(dest, "vX", "linux-x64/vulkan", true));
+  assert.ok(!alreadyInstalled(dest, "vY", "linux-x64/cpu") && !alreadyInstalled(dest, "vX", "win-x64/cpu", true));
+  // --optional : un échec n'arrête pas le build.
+  execFileSync("node", [SCRIPT, "--target", "x86_64-unknown-linux-gnu", "--from", archive, "--optional"], {
+    env: { ...process.env, HF_LLAMA_LOCK: join(dir, "lock.json"), HF_LLAMA_DEST: dest },
+    stdio: "pipe",
+  });
 });

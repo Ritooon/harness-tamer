@@ -2,6 +2,7 @@
 
 use hf_engine::llm::catalog::{ImportedModel, ModelStatus, download_model};
 use hf_engine::llm::hardware::{HardwareInfo, Recommendation, recommend};
+use hf_engine::llm::install::{InstalledRuntime, RuntimeLock, install_runtime, platform_key};
 use hf_engine::model::Settings;
 use hf_net::{ActionKind, JournalEntry, NetAction};
 use serde::Serialize;
@@ -11,7 +12,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{CmdError, CmdResult};
-use crate::runtime::RuntimeStatus;
+use crate::runtime::{RuntimeLocation, RuntimeStatus, downloaded_dir, location};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -119,6 +120,58 @@ pub fn runtime_status(state: State<'_, AppState>) -> RuntimeStatus {
 #[tauri::command]
 pub fn runtime_log(state: State<'_, AppState>) -> Vec<String> {
     state.runtime.log_tail()
+}
+
+/// Où `llama-server` a été trouvé, ou les chemins essayés.
+#[tauri::command]
+pub fn locate_runtime(app: AppHandle, state: State<'_, AppState>) -> RuntimeLocation {
+    location(&app, &state.store, &state.settings())
+}
+
+/// Installe llama.cpp dans les données de l'application : dialogue de
+/// consentement natif, archive officielle vérifiée par SHA-256. L'utilisateur
+/// n'a rien d'autre à faire.
+#[tauri::command]
+pub async fn install_llama_runtime(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    on_progress: Channel<DownloadProgress>,
+) -> CmdResult<InstalledRuntime> {
+    let target = platform_key(std::env::consts::OS, std::env::consts::ARCH)
+        .ok_or_else(|| CmdError::new("runtime.install", "llama.cpp publishes no build for this platform"))?;
+    let progress = move |bytes: u64, total: Option<u64>| {
+        let _ = on_progress.send(DownloadProgress { model_id: "llama.cpp".into(), bytes, total });
+    };
+    let settings = state.settings();
+    let installed = install_runtime(
+        &state.gated,
+        &RuntimeLock::builtin(),
+        &target,
+        &downloaded_dir(&state.store),
+        settings.ui_language,
+        &progress,
+    )
+    .await?;
+    // Un échec précédent (« moteur introuvable ») n'a plus lieu d'être affiché.
+    if location(&app, &state.store, &settings).found.is_some() {
+        state.runtime.clear_failure();
+    }
+    Ok(installed)
+}
+
+/// Choix manuel du programme `llama-server` (build CUDA, Vulkan, Homebrew…).
+#[tauri::command]
+pub async fn pick_llama_server(app: AppHandle) -> CmdResult<Option<String>> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let dialog = app.dialog().file().set_title("llama-server");
+        if cfg!(windows) {
+            dialog.add_filter("llama-server", &["exe"]).blocking_pick_file()
+        } else {
+            dialog.blocking_pick_file()
+        }
+    })
+    .await?;
+    Ok(picked.and_then(|p| p.into_path().ok()).map(|p| p.display().to_string()))
 }
 
 /// Démarre le moteur avec les réglages courants (chargement du modèle).

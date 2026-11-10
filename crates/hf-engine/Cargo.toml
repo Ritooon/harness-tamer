@@ -25,6 +25,8 @@ sha2.workspace = true
 ignore = "0.4"
 # Décompression zlib des objets Git (lecteur maison en lecture seule, voir scan/git.rs).
 flate2 = "1"
+# Lecture des archives officielles de llama.cpp (installation du moteur en un clic).
+tar = { version = "0.4", default-features = false }
 toml = "1"
 regex = "1"
 similar = "3"

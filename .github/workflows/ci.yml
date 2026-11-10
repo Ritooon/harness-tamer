@@ -92,7 +92,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: llama-server (version et empreintes fixées dans scripts/llama.lock.json)
+      - name: llama-server (version et empreintes fixées dans resources/catalog/llama.json)
         run: node scripts/fetch-llama.mjs --target ${{ matrix.target }}
       - name: Installeurs
         run: node scripts/package.mjs --skip-checks --target ${{ matrix.target }}

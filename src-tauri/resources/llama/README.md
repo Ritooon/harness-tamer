@@ -7,5 +7,5 @@ pour la plateforme ciblée. Ils ne sont pas versionnés : lancez
 node scripts/fetch-llama.mjs
 ```
 
-La version et les empreintes SHA-256 sont fixées dans `scripts/llama.lock.json`.
+La version et les empreintes SHA-256 sont fixées dans `resources/catalog/llama.json`.
 Voir le README principal, section « Construire ».

@@ -227,6 +227,7 @@ pub enum RuntimeBackend {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(default)]
 pub struct RuntimeSettings {
     pub backend: RuntimeBackend,
     /// Taille du contexte, en tokens.
@@ -237,6 +238,8 @@ pub struct RuntimeSettings {
     pub cpu_moe_layers: Option<u32>,
     /// Nom du modèle côté Ollama, si ce moteur est choisi.
     pub ollama_model: Option<String>,
+    /// Programme `llama-server` choisi par l'utilisateur ; `None` = recherche automatique.
+    pub server_path: Option<String>,
 }
 
 impl Default for RuntimeSettings {
@@ -247,6 +250,7 @@ impl Default for RuntimeSettings {
             gpu_layers: None,
             cpu_moe_layers: None,
             ollama_model: None,
+            server_path: None,
         }
     }
 }

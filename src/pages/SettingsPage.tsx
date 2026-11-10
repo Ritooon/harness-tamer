@@ -6,12 +6,13 @@ import type { Lang } from "../bindings/Lang";
 import type { ModelStatus } from "../bindings/ModelStatus";
 import type { Settings } from "../bindings/Settings";
 import type { SkillSource } from "../bindings/SkillSource";
+import { EngineInstall } from "../components/EngineInstall";
 import { Banner, Button, Empty, Field, Progress } from "../components/ui";
 import { useI18n, type Translate } from "../i18n";
 import type { MessageKey } from "../i18n/fr";
 import { api } from "../lib/api";
 import { formatBytes, formatDate } from "../lib/format";
-import type { DownloadProgress, JournalEntry, RuntimeStatus, SystemInfo } from "../lib/types";
+import type { DownloadProgress, JournalEntry, RuntimeLocation, RuntimeStatus, SystemInfo } from "../lib/types";
 
 type Props = { settings: Settings; onSettings: (s: Settings) => void };
 
@@ -242,6 +243,7 @@ function Runtime({ settings, save, onError }: SectionProps) {
   const { t, err } = useI18n();
   const [status, setStatus] = useState<RuntimeStatus>({ state: "stopped" });
   const [log, setLog] = useState<string[] | null>(null);
+  const [location, setLocation] = useState<RuntimeLocation | null>(null);
   const runtime = settings.runtime;
   const set = (patch: Partial<Settings["runtime"]>) => save({ ...settings, runtime: { ...runtime, ...patch } });
 
@@ -251,6 +253,14 @@ function Runtime({ settings, save, onError }: SectionProps) {
     const timer = window.setInterval(poll, 2000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const locate = useCallback(() => {
+    api.locateRuntime().then(setLocation).catch(() => setLocation(null));
+  }, []);
+  // Le programme trouvé dépend du chemin choisi dans les réglages.
+  useEffect(locate, [locate, runtime.server_path]);
+
+  const showLog = async () => setLog(await api.runtimeLog().catch(() => []));
 
   return (
     <section className="panel">
@@ -290,9 +300,62 @@ function Runtime({ settings, save, onError }: SectionProps) {
           onCommit={(v) => set({ context_size: Math.max(4096, v ?? 32768) })}
         />
       </div>
+      {runtime.backend === "embedded" && location && (
+        <div className="engine-location">
+          <strong>{t("settings.runtime.program")}</strong>{" "}
+          {location.found ? (
+            <>
+              <code>{location.found.path}</code>{" "}
+              <span className="chip">{t(`settings.runtime.source.${location.found.source}` as MessageKey)}</span>
+            </>
+          ) : (
+            <span className="chip chip-warning">{t("settings.runtime.program.missing")}</span>
+          )}{" "}
+          <Button
+            kind="ghost"
+            onClick={async () => {
+              try {
+                const picked = await api.pickLlamaServer();
+                if (picked) await set({ server_path: picked });
+              } catch (e) {
+                onError?.(err(e));
+              }
+            }}
+          >
+            {t("settings.runtime.program.pick")}
+          </Button>
+          {runtime.server_path && (
+            <Button kind="ghost" onClick={() => set({ server_path: null })}>
+              {t("settings.runtime.program.auto")}
+            </Button>
+          )}
+          {!location.found && (
+            <Banner kind="warning">
+              <p>{t("settings.runtime.program.help")}</p>
+              {location.install_target && !runtime.server_path && <EngineInstall onInstalled={locate} />}
+              <details>
+                <summary>{t("settings.runtime.program.searched")}</summary>
+                <ul className="files">
+                  {location.searched.map((path) => (
+                    <li key={path}>
+                      <code>{path}</code>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </Banner>
+          )}
+        </div>
+      )}
       <p>
         <RuntimeBadge status={status} />
       </p>
+      {/* Moteur absent : l'encadré ci-dessus l'explique déjà et propose l'installation. */}
+      {status.state === "failed" && !(status.code === "runtime.missing" && location && !location.found) && (
+        <Banner kind="error">
+          <p className="pre-wrap">{err({ code: status.code, message: status.message })}</p>
+        </Banner>
+      )}
       <div className="inline">
         <Button
           kind="primary"
@@ -301,16 +364,18 @@ function Runtime({ settings, save, onError }: SectionProps) {
             try {
               setStatus({ state: "starting", model: settings.active_model ?? runtime.ollama_model ?? "" });
               setStatus(await api.startRuntime());
-            } catch (e) {
-              onError?.(err(e));
+            } catch {
+              // L'erreur est affichée sous l'état, et le journal dit ce qui a été tenté.
               setStatus(await api.runtimeStatus());
+              await showLog();
             }
+            locate();
           }}
         >
           {t("settings.runtime.start")}
         </Button>
         <Button onClick={async () => setStatus(await api.stopRuntime())}>{t("settings.runtime.stop")}</Button>
-        <Button kind="ghost" onClick={async () => setLog(await api.runtimeLog())}>
+        <Button kind="ghost" onClick={showLog}>
           {t("settings.runtime.log")}
         </Button>
       </div>
@@ -330,9 +395,7 @@ export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
       return <span className="pill pill-success">{t("runtime.ready", { model: status.model })}</span>;
     case "failed":
       return (
-        <span className="pill pill-error" title={status.message}>
-          {t("runtime.failed")}
-        </span>
+        <span className="pill pill-error">{t("runtime.failed")}</span>
       );
   }
 }

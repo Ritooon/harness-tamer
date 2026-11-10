@@ -7,12 +7,13 @@ import type { ProjectSummary } from "../bindings/ProjectSummary";
 import type { SkillFile } from "../bindings/SkillFile";
 import type { SkillMeta } from "../bindings/SkillMeta";
 import type { SkillOrigin } from "../bindings/SkillOrigin";
+import { EngineInstall } from "../components/EngineInstall";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 import { SkillEditor } from "../components/SkillEditor";
 import { StreamView } from "../components/StreamView";
 import { Banner, Button, Empty, Field, Modal } from "../components/ui";
 import { useI18n, type Translate } from "../i18n";
-import { api } from "../lib/api";
+import { api, isEngineMissing } from "../lib/api";
 import { formatDate } from "../lib/format";
 import { navigate } from "../lib/router";
 import type { TextEvent } from "../lib/types";
@@ -260,6 +261,7 @@ function AssistedSkill({ onClose, onDraft }: DraftProps) {
   const [text, setText] = useState("");
   const [reasoning, setReasoning] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [engineMissing, setEngineMissing] = useState(false);
 
   useEffect(() => {
     api
@@ -273,12 +275,14 @@ function AssistedSkill({ onClose, onDraft }: DraftProps) {
     setText("");
     setReasoning("");
     setError(null);
+    setEngineMissing(false);
     const onEvent = (e: TextEvent) => (e.type === "token" ? setText((v) => v + e.text) : setReasoning((v) => v + e.text));
     try {
       const p = await api.proposeNewSkill(request.trim(), projectId || null, onEvent);
       onDraft({ content: p.content, files: p.files, origin: { type: "created" }, notes: p.warnings });
     } catch (e) {
       setError(err(e));
+      setEngineMissing(isEngineMissing(e));
     } finally {
       setRunning(false);
     }
@@ -286,7 +290,13 @@ function AssistedSkill({ onClose, onDraft }: DraftProps) {
 
   return (
     <Modal title={t("skills.new_assisted")} onClose={() => (running ? undefined : onClose())} wide>
-      {error && <Banner kind="error">{error}</Banner>}
+      {error && (
+        <Banner kind="error">
+          <p>{error}</p>
+          {/* Une fois le moteur installé, la demande repart toute seule. */}
+          {engineMissing && <EngineInstall onInstalled={() => void propose()} />}
+        </Banner>
+      )}
       <Field label={t("skills.request")}>
         <textarea rows={4} value={request} disabled={running} placeholder={t("skills.request.placeholder")} onChange={(e) => setRequest(e.target.value)} />
       </Field>

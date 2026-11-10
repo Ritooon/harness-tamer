@@ -10,6 +10,7 @@
 pub mod catalog;
 pub mod client;
 pub mod hardware;
+pub mod install;
 pub mod runtime;
 pub mod scripted;
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { GenEvent } from "../../bindings/GenEvent";
 import type { Issue } from "../../bindings/Issue";
 import type { SectionId } from "../../bindings/SectionId";
+import { EngineInstall } from "../../components/EngineInstall";
 import { IssuesList } from "../../components/IssuesList";
 import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { MarkdownPreview } from "../../components/MarkdownPreview";
@@ -11,7 +12,7 @@ import { StreamView } from "../../components/StreamView";
 import { Banner, Button, Empty, Progress } from "../../components/ui";
 import { useI18n } from "../../i18n";
 import type { MessageKey } from "../../i18n/fr";
-import { api } from "../../lib/api";
+import { api, isEngineMissing } from "../../lib/api";
 import { stripMarkers } from "../../lib/format";
 import type { ProjectDetail } from "../../lib/types";
 
@@ -42,7 +43,7 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
   const [section, setSection] = useState<SectionId>("commands");
   const [instruction, setInstruction] = useState("");
   const [note, setNote] = useState("");
-  const [message, setMessage] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ kind: "error" | "success" | "info"; text: string; engineMissing?: boolean } | null>(null);
   const dirty = content !== saved;
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
       setMessage({ kind: "success", text: t("agents.done", { number: result.version.number }) });
       onChanged();
     } catch (e) {
-      setMessage({ kind: "error", text: err(e) });
+      setMessage({ kind: "error", text: err(e), engineMissing: isEngineMissing(e) });
     } finally {
       setRun(null);
     }
@@ -115,7 +116,8 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
     <div className="agents">
       {message && (
         <Banner kind={message.kind} onClose={() => setMessage(null)}>
-          {message.text}
+          <p>{message.text}</p>
+          {message.engineMissing && <EngineInstall onInstalled={() => setMessage(null)} />}
         </Banner>
       )}
       <div className="toolbar">

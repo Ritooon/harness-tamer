@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "io.github.ritooon.harnessforge",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "node scripts/fetch-llama.mjs --if-missing --optional && pnpm dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "node scripts/fetch-llama.mjs --if-missing --optional && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {

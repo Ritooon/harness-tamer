@@ -123,7 +123,15 @@ input[type="checkbox"], input[type="radio"] { width: auto; }
 
 .banner { display: flex; gap: 12px; align-items: flex-start; border-radius: var(--radius); padding: 10px 12px; border: 1px solid; }
 .banner-body { flex: 1; min-width: 0; }
+.main > .banner { max-width: 1200px; margin: 0 auto 16px; }
 .banner-body ul { margin: 4px 0; padding-left: 20px; }
+.banner-body p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.banner-body p:last-child { margin-bottom: 0; }
+.engine-install { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
+.engine-install > div { flex: 1; min-width: 220px; }
+.engine-location { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.engine-location code { overflow-wrap: anywhere; }
+.engine-location .banner { flex-basis: 100%; }
 .banner-info { background: var(--accent-soft); border-color: var(--accent); }
 .banner-success { background: var(--success-soft); border-color: var(--success); }
 .banner-warning { background: var(--warning-soft); border-color: var(--warning); }

@@ -17,4 +17,8 @@ cpu_moe_layers: number | null,
 /**
  * Nom du modèle côté Ollama, si ce moteur est choisi.
  */
-ollama_model: string | null, };
+ollama_model: string | null, 
+/**
+ * Programme `llama-server` choisi par l'utilisateur ; `None` = recherche automatique.
+ */
+server_path: string | null, };

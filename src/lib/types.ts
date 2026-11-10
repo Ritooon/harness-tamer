@@ -6,6 +6,7 @@ import type { Project } from "../bindings/Project";
 import type { Recommendation } from "../bindings/Recommendation";
 import type { RepoProfile } from "../bindings/RepoProfile";
 import type { RuntimeBackend } from "../bindings/RuntimeBackend";
+import type { ServerCandidate } from "../bindings/ServerCandidate";
 import type { SkillMeta } from "../bindings/SkillMeta";
 import type { VersionMeta } from "../bindings/VersionMeta";
 
@@ -24,7 +25,14 @@ export type RuntimeStatus =
   | { state: "stopped" }
   | { state: "starting"; model: string }
   | { state: "ready"; model: string; backend: RuntimeBackend }
-  | { state: "failed"; message: string };
+  | { state: "failed"; code: string; message: string };
+
+/** Où se trouve `llama-server` (commande `locate_runtime`). */
+export type RuntimeLocation = {
+  found: ServerCandidate | null;
+  searched: string[];
+  install_target: string | null;
+};
 
 export type SystemInfo = {
   hardware: HardwareInfo;

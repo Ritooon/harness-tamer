@@ -23,6 +23,8 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // Les tests de scripts/ tournent avec `node --test` (pnpm test:scripts).
+    include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
     css: false,
   },

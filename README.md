@@ -28,8 +28,8 @@ Deux règles, appliquées par le code et vérifiées en intégration continue :
    chaque requête, et chaque accès est journalisé.
 
 Les seules actions qui peuvent toucher Internet sont celles que vous lancez
-vous-même : télécharger un modèle, chercher ou importer un skill en ligne, ouvrir un
-lien. Chacune ouvre un dialogue qui dit ce qui va être fait et quels hôtes seront
+vous-même : télécharger un modèle, installer le moteur s'il manque, chercher ou
+importer un skill en ligne, ouvrir un lien. Chacune ouvre un dialogue qui dit ce qui va être fait et quels hôtes seront
 contactés. Rien ne part tant que vous n'avez pas cliqué sur « Autoriser ». Dans les
 réglages, la politique « Coupé » bloque même ces actions. Il n'existe pas de mode
 « toujours autoriser ».
@@ -126,10 +126,26 @@ Réglages du moteur intégré :
 - **Couches MoE gardées en RAM** (`--n-cpu-moe`) : utile quand la VRAM est trop
   petite pour tout le modèle.
 
-Le `llama-server` livré est la build CPU sur Linux et Windows, et la build Metal sur
-macOS Apple Silicon. Pour une accélération CUDA ou Vulkan, déposez votre propre build
-de `llama-server` et ses bibliothèques dans `<données>/runtimes/llama/`. Elle est
-alors utilisée en priorité.
+### Le moteur llama.cpp
+
+Vous n'avez rien à installer à la main. L'application cherche `llama-server` dans
+cet ordre et prend le premier trouvé :
+
+1. le programme choisi dans **Réglages › Moteur d'inférence** (« Choisir le programme… ») ;
+2. `<données>/runtimes/llama/`, pour votre propre build (CUDA, Vulkan…) ;
+3. celui livré dans l'installeur (build CPU sur Linux et Windows, Metal sur macOS
+   Apple Silicon) ;
+4. celui que l'application a installé elle-même (`<données>/runtimes/llama-cpp/`) ;
+5. une installation du système : Homebrew, gestionnaire de paquets, `PATH`.
+
+S'il n'y en a aucun, l'application le dit et propose **Installer le moteur
+llama.cpp** : un clic, le dialogue de consentement, puis l'archive officielle est
+téléchargée depuis GitHub, vérifiée par son empreinte SHA-256 et installée dans les
+données de l'application. Une archive sans empreinte connue est refusée.
+
+Les réglages affichent le programme utilisé et d'où il vient. Le **journal du
+moteur** note chaque tentative de démarrage, la commande lancée et la raison d'un
+échec.
 
 ## Utilisation
 
@@ -186,22 +202,27 @@ Les paquets et leur fichier `SHA256SUMS` sont écrits dans
 ### llama-server
 
 `scripts/fetch-llama.mjs` copie `llama-server` et ses bibliothèques dans
-`src-tauri/resources/llama/`, que Tauri embarque. La version de llama.cpp, les
-archives et leurs empreintes SHA-256 sont fixées dans `scripts/llama.lock.json`. Un
-build échoue si une empreinte ne correspond pas.
+`src-tauri/resources/llama/`, que Tauri embarque. `pnpm tauri dev` et
+`pnpm tauri build` le lancent d'eux-mêmes : il n'y a pas de commande à connaître.
+Si le téléchargement échoue (pas de réseau), le build continue et l'application
+proposera d'installer le moteur.
 
-Les empreintes ne sont pas encore renseignées. Pour une nouvelle version, une seule
-fois :
+La version de llama.cpp, les archives et leurs empreintes SHA-256 sont fixées dans
+`resources/catalog/llama.json`, utilisé à la fois par ce script et par
+l'installation en un clic. Un build échoue si une empreinte ne correspond pas.
+
+Les empreintes ne sont pas encore renseignées. Au premier téléchargement sur un
+poste de développement, le script les écrit dans le fichier, qu'il reste à
+versionner :
 
 ```bash
-node scripts/fetch-llama.mjs --update-lock          # par plateforme et variante
-git add scripts/llama.lock.json
+git add resources/catalog/llama.json
 ```
 
-Le script vérifie l'empreinte publiée par GitHub quand elle existe, sinon il fait
-confiance au premier téléchargement et le dit. Pour un build sans réseau, passez des
-archives déjà téléchargées avec `--from <archive>` : leurs empreintes sont vérifiées
-de la même façon.
+Il vérifie l'empreinte publiée par GitHub quand elle existe, sinon il fait confiance
+au premier téléchargement et le dit. En intégration continue, une empreinte manquante
+est une erreur. Pour un build sans réseau, passez des archives déjà téléchargées avec
+`--from <archive>` : leurs empreintes sont vérifiées de la même façon.
 
 ### Signature
 
@@ -240,10 +261,12 @@ Rust et TypeScript sont générés par `pnpm bindings` dans `src/bindings/`.
 - **Licence du projet** : pas encore choisie, aucun fichier `LICENSE`. À décider
   avant toute diffusion. Les modèles du catalogue sont sous Apache 2.0 et
   llama.cpp sous MIT.
-- **Empreintes llama.cpp** : `scripts/llama.lock.json` fixe la version `v0.9.0`, mais
-  les noms d'archives et les empreintes seront remplis au premier `--update-lock`. Les
-  téléchargements GitHub n'étaient pas accessibles depuis l'environnement de
-  développement.
+- **Empreintes llama.cpp** : `resources/catalog/llama.json` fixe la version `v0.9.0`,
+  mais les noms d'archives et les empreintes seront remplis au premier téléchargement.
+  GitHub n'était pas accessible depuis l'environnement de développement : ni le
+  script ni l'installation en un clic n'ont pu être essayés contre le vrai GitHub.
+  Tant que le fichier n'est pas rempli, l'installation en un clic s'appuie sur
+  l'empreinte publiée par GitHub.
 - **Signature et notarisation** des paquets macOS et Windows : non configurées, donc
   non testées.
 - **Banc d'essai des modèles** sur la tâche réelle (prévu par l'ADR 0001) : pas

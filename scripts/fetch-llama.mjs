@@ -3,34 +3,40 @@
 //
 // Ce script s'exécute sur la machine de build, jamais dans l'application :
 // il télécharge l'archive officielle de llama.cpp fixée dans
-// `scripts/llama.lock.json`, vérifie son empreinte SHA-256, puis copie
+// `resources/catalog/llama.json`, vérifie son empreinte SHA-256, puis copie
 // `llama-server` et ses bibliothèques dans `src-tauri/resources/llama/`,
-// que Tauri embarque dans l'installeur.
+// que Tauri embarque dans l'installeur. `tauri dev` et `tauri build` le
+// lancent d'eux-mêmes (voir tauri.conf.json).
 //
 // Premier téléchargement d'une version : les noms d'archives et empreintes
-// ne sont pas encore connus. Avec `--update-lock`, le script interroge l'API
-// GitHub, choisit l'archive selon le motif du fichier de verrouillage,
-// vérifie l'empreinte publiée par GitHub quand elle existe, et écrit nom et
-// empreinte dans le fichier, à versionner. Sans `--update-lock`, une entrée
-// incomplète est une erreur : un build ne fait jamais confiance au réseau.
+// ne sont pas encore connus. Le script interroge alors l'API GitHub, choisit
+// l'archive selon le motif du fichier de verrouillage, vérifie l'empreinte
+// publiée par GitHub quand elle existe, et écrit nom et empreinte dans le
+// fichier, à versionner. En intégration continue (variable CI), une entrée
+// incomplète est une erreur sauf avec `--update-lock` : un build publié ne
+// fait jamais confiance au réseau.
 //
 // Usage :
 //   node scripts/fetch-llama.mjs [--target <triple Rust>] [--variant cpu|vulkan|metal]
-//                                [--update-lock] [--from <archive locale>]...
+//                                [--update-lock] [--if-missing] [--optional]
+//                                [--from <archive locale>]...
 //
-// --from permet un build sans réseau à partir d'archives déjà téléchargées
-// (leurs empreintes sont vérifiées comme les autres).
+// --if-missing  ne fait rien si la bonne version est déjà en place.
+// --optional    un échec (pas de réseau…) n'arrête pas le build : l'application
+//               proposera alors d'installer le moteur elle-même.
+// --from        build sans réseau à partir d'archives déjà téléchargées
+//               (leurs empreintes sont vérifiées comme les autres).
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { chmodSync, cpSync, createReadStream, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Surchargeables pour les tests du script.
-const LOCK = process.env.HF_LLAMA_LOCK ?? join(ROOT, "scripts", "llama.lock.json");
+const LOCK = process.env.HF_LLAMA_LOCK ?? join(ROOT, "resources", "catalog", "llama.json");
 const DEST = process.env.HF_LLAMA_DEST ?? join(ROOT, "src-tauri", "resources", "llama");
 
 /** Triple Rust → plateforme llama.cpp. */
@@ -104,22 +110,35 @@ export function extract(archive, into) {
   }
 }
 
-/** Copie les fichiers livrés d'un dossier extrait ; rend la liste copiée. */
+/** Copie à plat les fichiers livrés d'un dossier extrait ; rend la liste copiée. */
 export function install(extracted, dest) {
   const files = walk(extracted);
-  const server = files.find((f) => /^llama-server(\.exe)?$/.test(basename(f)));
-  if (!server) throw new Error("llama-server introuvable dans l'archive");
+  if (!files.some((f) => /^llama-server(\.exe)?$/.test(basename(f)))) throw new Error("llama-server introuvable dans l'archive");
   mkdirSync(dest, { recursive: true });
-  const serverDir = dirname(server);
-  const copied = [];
+  const copied = new Set();
   for (const file of files) {
     const name = basename(file);
-    // Bibliothèques à côté du serveur ; licences où qu'elles soient.
-    if (!isShipped(name) || (dirname(file) !== serverDir && !/^(licen|copying|notice)/i.test(name))) continue;
+    if (!isShipped(name)) continue;
     cpSync(file, join(dest, name), { dereference: true });
-    copied.push(name);
+    copied.add(name);
   }
-  return copied.sort();
+  return [...copied].sort();
+}
+
+/**
+ * Vrai si `dest` contient déjà llama-server pour cette version et cette cible.
+ * Sans variante demandée, toute variante de la bonne plateforme convient
+ * (une build Vulkan préparée à la main n'est pas remplacée par la build CPU).
+ */
+export function alreadyInstalled(dest, tag, key, anyVariant = false) {
+  try {
+    const version = JSON.parse(readFileSync(join(dest, "VERSION.json"), "utf8"));
+    const server = join(dest, key.startsWith("win") ? "llama-server.exe" : "llama-server");
+    const sameTarget = version.target === key || (anyVariant && String(version.target).split("/")[0] === key.split("/")[0]);
+    return version.tag === tag && sameTarget && existsSync(server);
+  } catch {
+    return false;
+  }
 }
 
 async function download(url, path, headers = {}) {
@@ -137,7 +156,7 @@ async function releaseAssets(repo, tag) {
 }
 
 function parseArgs(argv) {
-  const args = { from: [], updateLock: false };
+  const args = { from: [], updateLock: false, ifMissing: false, optional: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--") continue; // séparateur ajouté par `pnpm run … --`
@@ -145,6 +164,8 @@ function parseArgs(argv) {
     else if (a === "--variant") args.variant = argv[++i];
     else if (a === "--from") args.from.push(resolve(argv[++i]));
     else if (a === "--update-lock") args.updateLock = true;
+    else if (a === "--if-missing") args.ifMissing = true;
+    else if (a === "--optional") args.optional = true;
     else if (a === "--help" || a === "-h") args.help = true;
     else throw new Error(`option inconnue : ${a}`);
   }
@@ -158,9 +179,15 @@ async function main() {
     return;
   }
   const lock = JSON.parse(readFileSync(LOCK, "utf8"));
+  // Dans un hook de `tauri build --target …`, la cible vient de Tauri.
+  args.target ??= TRIPLES[process.env.TAURI_ENV_TARGET_TRIPLE] ? process.env.TAURI_ENV_TARGET_TRIPLE : undefined;
   const key = resolveTargetKey(args);
   const entries = lock.targets[key];
-  if (!entries) throw new Error(`aucune entrée « ${key} » dans scripts/llama.lock.json`);
+  if (!entries) throw new Error(`aucune entrée « ${key} » dans resources/catalog/llama.json`);
+  if (args.ifMissing && alreadyInstalled(DEST, lock.tag, key, !args.variant)) return;
+  // Hors CI, une entrée incomplète est remplie au premier téléchargement.
+  const mayFill = args.updateLock || !process.env.CI;
+  let filled = false;
 
   const work = mkdtempSync(join(tmpdir(), "hf-llama-"));
   try {
@@ -175,7 +202,7 @@ async function main() {
         path = join(work, entry.file);
         console.log(`téléchargement de ${entry.file}…`);
         await download(`https://github.com/${lock.repo}/releases/download/${lock.tag}/${entry.file}`, path);
-      } else if (args.updateLock) {
+      } else if (mayFill) {
         assets ??= await releaseAssets(lock.repo, lock.tag);
         const asset = pickAsset(assets, entry.pattern);
         path = join(work, asset.name);
@@ -186,9 +213,10 @@ async function main() {
         if (published && published !== actual) throw new Error(`empreinte différente de celle publiée par GitHub pour ${asset.name}`);
         entry.file = asset.name;
         entry.sha256 = actual;
+        filled = true;
         console.log(`  sha256 ${actual}${published ? " (identique à l'empreinte publiée)" : " (GitHub n'en publie pas : confiance au premier usage)"}`);
       } else {
-        throw new Error(`l'entrée « ${key} » n'a pas encore d'empreinte : relancez avec --update-lock, vérifiez, puis versionnez scripts/llama.lock.json`);
+        throw new Error(`l'entrée « ${key} » n'a pas encore d'empreinte : lancez le script avec --update-lock sur un poste de développement, puis versionnez resources/catalog/llama.json`);
       }
       if (entry.sha256) {
         const actual = await sha256File(path);
@@ -211,7 +239,10 @@ async function main() {
       join(DEST, "VERSION.json"),
       `${JSON.stringify({ repo: lock.repo, tag: lock.tag, target: key, archives: entries.map((e) => ({ file: e.file, sha256: e.sha256 })) }, null, 2)}\n`,
     );
-    if (args.updateLock) writeFileSync(LOCK, `${JSON.stringify(lock, null, 2)}\n`);
+    if (filled) {
+      writeFileSync(LOCK, `${JSON.stringify(lock, null, 2)}\n`);
+      console.log("resources/catalog/llama.json complété : pensez à le versionner (git add resources/catalog/llama.json).");
+    }
     console.log(`llama.cpp ${lock.tag} (${key}) installé dans src-tauri/resources/llama : ${[...copied].join(", ")}`);
   } finally {
     rmSync(work, { recursive: true, force: true });
@@ -220,7 +251,9 @@ async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((e) => {
+    const optional = process.argv.includes("--optional");
     console.error(`fetch-llama : ${e.message}`);
-    process.exit(1);
+    if (optional) console.error("fetch-llama : le build continue sans llama-server ; l'application proposera de l'installer.");
+    process.exit(optional ? 0 : 1);
   });
 }

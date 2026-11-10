@@ -10,7 +10,7 @@ export function settings(patch: Partial<Settings> = {}): Settings {
     active_model: null,
     models_dir: null,
     default_export_dir: null,
-    runtime: { backend: "embedded", context_size: 32768, gpu_layers: null, cpu_moe_layers: null, ollama_model: null },
+    runtime: { backend: "embedded", context_size: 32768, gpu_layers: null, cpu_moe_layers: null, ollama_model: null, server_path: null },
     skill_sources: [],
     ...patch,
   };
