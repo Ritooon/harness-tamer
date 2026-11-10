@@ -305,6 +305,8 @@ export const en: Record<MessageKey, string> = {
   "settings.runtime.source.downloaded": "installed by the application",
   "settings.runtime.source.system": "installed on the system",
   "error.runtime.install": "Could not install the engine: {message}",
+  "error.runtime.archive_missing":
+    "Could not install the engine: llama.cpp does not publish the expected archive for this computer. Update HarnessForge, or point to an installed llama-server with “Choose the program…” in the settings.\nTechnical detail: {message}",
 
   "error.generic": "Something went wrong: {message}",
   "error.project.not_found": "Project not found.",

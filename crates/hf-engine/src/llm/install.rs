@@ -33,6 +33,10 @@ const DOWNLOAD_HOSTS: [&str; 3] =
 #[derive(Debug, Clone, Deserialize)]
 pub struct RuntimeLock {
     pub repo: String,
+    /// Version de llama.cpp, pour l'affichage (`v0.9.0`).
+    #[serde(default)]
+    pub version: Option<String>,
+    /// Build publié qui contient les binaires de cette version (`b12110`).
     pub tag: String,
     pub targets: BTreeMap<String, Vec<LockedArchive>>,
 }
@@ -46,6 +50,14 @@ pub struct LockedArchive {
 }
 
 impl RuntimeLock {
+    /// Nom affiché à l'utilisateur : `v0.9.0 (b12110)`.
+    pub fn label(&self) -> String {
+        match &self.version {
+            Some(version) => format!("{version} ({})", self.tag),
+            None => self.tag.clone(),
+        }
+    }
+
     pub fn builtin() -> Self {
         serde_json::from_str(BUILTIN).expect("resources/catalog/llama.json est valide (vérifié par les tests)")
     }
@@ -110,10 +122,11 @@ fn plan_from_release(entry: &LockedArchive, assets: &[Asset]) -> Result<Planned>
     let pattern = Regex::new(&entry.pattern).map_err(|e| EngineError::RuntimeInstall(e.to_string()))?;
     let matches: Vec<&Asset> = assets.iter().filter(|a| pattern.is_match(&a.name)).collect();
     let [asset] = matches.as_slice() else {
-        return Err(EngineError::RuntimeInstall(format!(
-            "{} published archive(s) match {}",
+        return Err(EngineError::RuntimeArchiveMissing(format!(
+            "{} archive(s) match {} among {} published file(s)",
             matches.len(),
-            entry.pattern
+            entry.pattern,
+            assets.len()
         )));
     };
     let published = asset.digest.as_deref().and_then(|d| d.strip_prefix("sha256:")).map(str::to_owned);
@@ -148,18 +161,18 @@ pub async fn install_runtime(
     let entries = lock
         .targets
         .get(target)
-        .ok_or_else(|| EngineError::RuntimeInstall(format!("llama.cpp publishes no archive for {target}")))?;
+        .ok_or_else(|| EngineError::RuntimeArchiveMissing(format!("no archive is listed for {target}")))?;
     let api = release_api(lock)?;
     let purpose = match lang {
         Lang::Fr => format!(
             "Télécharger le moteur llama.cpp {} ({target}) depuis GitHub, quelques dizaines de Mo. \
              Aucune donnée n'est envoyée ; l'archive est vérifiée par son empreinte SHA-256.",
-            lock.tag
+            lock.label()
         ),
         Lang::En => format!(
             "Download the llama.cpp engine {} ({target}) from GitHub, a few tens of MB. \
              No data is sent; the archive is verified against its SHA-256 checksum.",
-            lock.tag
+            lock.label()
         ),
     };
     let action = hf_net::NetAction::new(hf_net::ActionKind::RuntimeDownload, purpose, vec![api.clone()])
@@ -374,11 +387,25 @@ mod tests {
         ] {
             let key = platform_key(os, arch).unwrap();
             let entries = lock.targets.get(&key).unwrap_or_else(|| panic!("entrée manquante : {key}"));
+            assert!(!entries.is_empty(), "{key} : aucune archive");
+        }
+        // Le verrou livré est complet : l'application n'a pas à interroger
+        // l'API de GitHub, et chaque archive est vérifiée contre une empreinte
+        // versionnée avec le code.
+        for (key, entries) in &lock.targets {
             for entry in entries {
-                Regex::new(&entry.pattern).unwrap();
-                assert_eq!(entry.file.is_some(), entry.sha256.is_some(), "{key} : nom et empreinte vont ensemble");
+                let file = entry.file.as_deref().unwrap_or_else(|| panic!("{key} : nom d'archive manquant"));
+                let sha256 = entry.sha256.as_deref().unwrap_or_else(|| panic!("{key} : empreinte manquante"));
+                assert!(Regex::new(&entry.pattern).unwrap().is_match(file), "{key} : {file} ne suit pas son motif");
+                assert!(file.contains(&lock.tag), "{key} : {file} n'appartient pas au build {}", lock.tag);
+                assert!(
+                    sha256.len() == 64 && sha256.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')),
+                    "{key} : empreinte invalide"
+                );
+                assert_eq!(safe_file_name(file).unwrap(), file);
             }
         }
+        assert_eq!(lock.label(), format!("{} ({})", lock.version.as_deref().unwrap(), lock.tag));
         assert_eq!(platform_key("macos", "aarch64").unwrap(), "macos-arm64/metal");
         assert!(platform_key("freebsd", "x86_64").is_none());
         for host in DOWNLOAD_HOSTS {

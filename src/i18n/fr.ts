@@ -303,6 +303,8 @@ export const fr = {
   "settings.runtime.source.downloaded": "installé par l'application",
   "settings.runtime.source.system": "installé sur le système",
   "error.runtime.install": "Installation du moteur impossible : {message}",
+  "error.runtime.archive_missing":
+    "Installation du moteur impossible : llama.cpp ne publie pas l'archive attendue pour cet ordinateur. Mettez HarnessForge à jour, ou indiquez un programme llama-server déjà installé avec « Choisir le programme… » dans les réglages.\nDétail technique : {message}",
 
   "error.generic": "Une erreur est survenue : {message}",
   "error.project.not_found": "Projet introuvable.",

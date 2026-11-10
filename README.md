@@ -261,12 +261,12 @@ Rust et TypeScript sont générés par `pnpm bindings` dans `src/bindings/`.
 - **Licence du projet** : pas encore choisie, aucun fichier `LICENSE`. À décider
   avant toute diffusion. Les modèles du catalogue sont sous Apache 2.0 et
   llama.cpp sous MIT.
-- **Empreintes llama.cpp** : `resources/catalog/llama.json` fixe la version `v0.9.0`,
-  mais les noms d'archives et les empreintes seront remplis au premier téléchargement.
-  GitHub n'était pas accessible depuis l'environnement de développement : ni le
-  script ni l'installation en un clic n'ont pu être essayés contre le vrai GitHub.
-  Tant que le fichier n'est pas rempli, l'installation en un clic s'appuie sur
-  l'empreinte publiée par GitHub.
+- **Version de llama.cpp** : `resources/catalog/llama.json` fixe la version `v0.9.0`,
+  c'est-à-dire le build `b12110`, avec le nom et l'empreinte SHA-256 de chaque archive.
+  llama.cpp ne publie ses binaires que dans ses builds numérotés (`bNNNN`), pas sous
+  l'étiquette de version : c'est le fichier `nightly-tag.txt` de la version qui donne
+  le build. Les empreintes ont été relevées sur la page de publication de GitHub. Si
+  llama.cpp retirait un jour ce build, il faudrait passer à une version plus récente.
 - **Signature et notarisation** des paquets macOS et Windows : non configurées, donc
   non testées.
 - **Banc d'essai des modèles** sur la tâche réelle (prévu par l'ADR 0001) : pas

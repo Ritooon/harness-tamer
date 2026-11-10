@@ -1,18 +1,69 @@
 {
-  "$comment": "Version de llama.cpp livrée avec HarnessForge. Les champs file et sha256 sont remplis au premier téléchargement (node scripts/fetch-llama.mjs --update-lock) puis versionnés : les builds suivants vérifient l'empreinte et échouent si elle change.",
+  "$comment": "Version de llama.cpp livrée avec HarnessForge. llama.cpp ne publie ses binaires que dans ses builds numérotés (bNNNN) : `tag` est le build qui correspond à `version`, indiqué par le fichier nightly-tag.txt de la version. Les empreintes sont celles publiées par GitHub ; tout téléchargement est vérifié contre elles. Pour changer de version : modifier version et tag, remettre file et sha256 à null, lancer `node scripts/fetch-llama.mjs --update-lock`, puis versionner ce fichier.",
   "repo": "ggml-org/llama.cpp",
-  "tag": "v0.9.0",
+  "version": "v0.9.0",
+  "tag": "b12110",
   "targets": {
-    "linux-x64/cpu": [{ "pattern": "-bin-ubuntu-x64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
-    "linux-x64/vulkan": [{ "pattern": "-bin-ubuntu-vulkan-x64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
-    "linux-arm64/cpu": [{ "pattern": "-bin-ubuntu-arm64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
-    "macos-arm64/metal": [{ "pattern": "-bin-macos-arm64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
-    "macos-x64/cpu": [{ "pattern": "-bin-macos-x64\\.(tar\\.gz|zip)$", "file": null, "sha256": null }],
-    "win-x64/cpu": [{ "pattern": "-bin-win-cpu-x64\\.zip$", "file": null, "sha256": null }],
-    "win-x64/vulkan": [
-      { "pattern": "-bin-win-cpu-x64\\.zip$", "file": null, "sha256": null },
-      { "pattern": "-bin-win-vulkan-x64\\.zip$", "file": null, "sha256": null }
+    "linux-x64/cpu": [
+      {
+        "pattern": "-bin-ubuntu-x64\\.(tar\\.gz|zip)$",
+        "file": "llama-b12110-bin-ubuntu-x64.tar.gz",
+        "sha256": "368227edcc229be5f9bed16a2223d79b5e41d0ac2e19bcf5825e82291c060e55"
+      }
     ],
-    "win-arm64/cpu": [{ "pattern": "-bin-win-cpu-arm64\\.zip$", "file": null, "sha256": null }]
+    "linux-x64/vulkan": [
+      {
+        "pattern": "-bin-ubuntu-vulkan-x64\\.(tar\\.gz|zip)$",
+        "file": "llama-b12110-bin-ubuntu-vulkan-x64.tar.gz",
+        "sha256": "a5d741940956ec62e8783aee7e5a4c7c761af867d6f027c3277a51e1a3ac59b0"
+      }
+    ],
+    "linux-arm64/cpu": [
+      {
+        "pattern": "-bin-ubuntu-arm64\\.(tar\\.gz|zip)$",
+        "file": "llama-b12110-bin-ubuntu-arm64.tar.gz",
+        "sha256": "4758b51335e37b4346251f2687d64841ff1c07ecb27fc46323945bb2ec9c44d2"
+      }
+    ],
+    "macos-arm64/metal": [
+      {
+        "pattern": "-bin-macos-arm64\\.(tar\\.gz|zip)$",
+        "file": "llama-b12110-bin-macos-arm64.tar.gz",
+        "sha256": "4f5b8de12e0b9516658ca6a5764c6ffb3d7c659c3dd538556b1413c7b4050662"
+      }
+    ],
+    "macos-x64/cpu": [
+      {
+        "pattern": "-bin-macos-x64\\.(tar\\.gz|zip)$",
+        "file": "llama-b12110-bin-macos-x64.tar.gz",
+        "sha256": "c8094268b6bf62f4998f0e45656fd9f5e2d4afb6b1cd0044d761db64be1dd47d"
+      }
+    ],
+    "win-x64/cpu": [
+      {
+        "pattern": "-bin-win-cpu-x64\\.zip$",
+        "file": "llama-b12110-bin-win-cpu-x64.zip",
+        "sha256": "98901e327c252875accaf2d1bf364e10e868843b0b63468baad1aa945cdc5da2"
+      }
+    ],
+    "win-x64/vulkan": [
+      {
+        "pattern": "-bin-win-cpu-x64\\.zip$",
+        "file": "llama-b12110-bin-win-cpu-x64.zip",
+        "sha256": "98901e327c252875accaf2d1bf364e10e868843b0b63468baad1aa945cdc5da2"
+      },
+      {
+        "pattern": "-bin-win-vulkan-x64\\.zip$",
+        "file": "llama-b12110-bin-win-vulkan-x64.zip",
+        "sha256": "9732a5e48887ca54d0bfe4af4324dc85fd56cd8cda19b52df3542fa6ebe6874f"
+      }
+    ],
+    "win-arm64/cpu": [
+      {
+        "pattern": "-bin-win-cpu-arm64\\.zip$",
+        "file": "llama-b12110-bin-win-cpu-arm64.zip",
+        "sha256": "f8d20fb07d0b499988ced8963afcd5ded2d2cdd9983b757fbc7e51c4abd722e8"
+      }
+    ]
   }
 }

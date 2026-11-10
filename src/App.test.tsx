@@ -30,7 +30,7 @@ describe("App", () => {
       list_projects: [],
       install_llama_runtime: () => {
         status = { state: "stopped" };
-        return { tag: "v0.9.0", target: "macos-arm64/metal", server: "/d/llama-server", files: ["llama-server"] };
+        return { tag: "b12110", target: "macos-arm64/metal", server: "/d/llama-server", files: ["llama-server"] };
       },
     });
     render(<App />);
@@ -39,7 +39,7 @@ describe("App", () => {
     expect(screen.queryByText(/\/a\/llama-server/)).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "Installer le moteur llama.cpp…" }));
-    expect(await screen.findByText(/Moteur llama.cpp v0.9.0 installé/)).toBeInTheDocument();
+    expect(await screen.findByText(/Moteur llama.cpp b12110 installé/)).toBeInTheDocument();
     expect(callsOf("install_llama_runtime")).toHaveLength(1);
   });
 });
