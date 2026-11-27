@@ -102,6 +102,8 @@ export const fr = {
   "agents.save": "Enregistrer la version",
   "agents.note": "Note de version (facultative)",
   "agents.unsaved": "Modifications non enregistrées",
+  "agents.up_to_date": "À jour · version {number}",
+  "agents.up_to_date.hint": "Aucune modification depuis la version {number}. Pour enregistrer une nouvelle version, modifiez le texte en mode Édition ou Côte à côte.",
   "agents.edit": "Édition",
   "agents.preview": "Aperçu",
   "agents.split": "Côte à côte",

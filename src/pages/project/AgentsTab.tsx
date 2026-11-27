@@ -32,11 +32,16 @@ export const SECTIONS: SectionId[] = [
 type View = "edit" | "preview" | "split";
 type Run = { index: number; total: number; section: SectionId | null; text: string; reasoning: string; retrying: boolean };
 
+/** Numéro de la dernière version enregistrée, ou `null` s'il n'y en a aucune. */
+const latestVersion = (versions: ProjectDetail["versions"]) =>
+  versions.reduce<number | null>((max, v) => (max === null || v.number > max ? v.number : max), null);
+
 export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChanged: () => void }) {
   const { t, err } = useI18n();
   const id = detail.project.id;
   const [content, setContent] = useState(detail.agents ?? "");
   const [saved, setSaved] = useState(detail.agents ?? "");
+  const [version, setVersion] = useState(() => latestVersion(detail.versions));
   const [view, setView] = useState<View>("split");
   const [run, setRun] = useState<Run | null>(null);
   const [issues, setIssues] = useState<Issue[] | null>(null);
@@ -50,6 +55,10 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
     setContent(detail.agents ?? "");
     setSaved(detail.agents ?? "");
   }, [detail.agents]);
+
+  useEffect(() => {
+    setVersion(latestVersion(detail.versions));
+  }, [detail.versions]);
 
   const onEvent = (e: GenEvent) =>
     setRun((prev) => {
@@ -77,6 +86,7 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
       const result = await api.generateAgents(id, { sections, instruction: sections ? instruction.trim() || null : null }, onEvent);
       setContent(result.content);
       setSaved(result.content);
+      setVersion(result.version.number);
       setIssues(result.issues);
       setInstruction("");
       setMessage({ kind: "success", text: t("agents.done", { number: result.version.number }) });
@@ -90,10 +100,11 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
 
   const save = async () => {
     try {
-      const version = await api.saveAgents(id, content, note.trim() || null);
+      const meta = await api.saveAgents(id, content, note.trim() || null);
       setSaved(content);
+      setVersion(meta.number);
       setNote("");
-      setMessage({ kind: "success", text: t("agents.done", { number: version.number }) });
+      setMessage({ kind: "success", text: t("agents.done", { number: meta.number }) });
       setIssues(await api.checkAgents(id));
       onChanged();
     } catch (e) {
@@ -111,6 +122,9 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
 
   const preview = useMemo(() => stripMarkers(content), [content]);
   const busy = run !== null;
+  // Rien à enregistrer : on dit pourquoi le bouton est grisé et comment l'activer.
+  const upToDate = !dirty && !busy && version !== null;
+  const upToDateHint = upToDate ? t("agents.up_to_date.hint", { number: version }) : undefined;
 
   return (
     <div className="agents">
@@ -179,8 +193,21 @@ export function AgentsTab({ detail, onChanged }: { detail: ProjectDetail; onChan
               ))}
             </div>
             {dirty && <span className="chip chip-warning">{t("agents.unsaved")}</span>}
-            <input className="grow" aria-label={t("agents.note")} placeholder={t("agents.note")} value={note} onChange={(e) => setNote(e.target.value)} />
-            <Button kind="primary" disabled={!dirty || busy} onClick={save}>
+            {upToDate && (
+              <span className="chip chip-success" title={upToDateHint}>
+                {t("agents.up_to_date", { number: version })}
+              </span>
+            )}
+            <input
+              className="grow"
+              aria-label={t("agents.note")}
+              placeholder={t("agents.note")}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              disabled={!dirty || busy}
+              title={upToDateHint}
+            />
+            <Button kind="primary" disabled={!dirty || busy} onClick={save} title={upToDateHint}>
               {t("agents.save")}
             </Button>
             <Button onClick={check} disabled={busy}>

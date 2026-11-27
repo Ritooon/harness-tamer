@@ -276,7 +276,7 @@ impl PackIndex {
         }
         let mut raw = vec![0u8; 256 * 4];
         file.read_exact(&mut raw).ok()?;
-        let fanout = raw.chunks_exact(4).map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]])).collect();
+        let fanout = raw.as_chunks::<4>().0.iter().map(|c| u32::from_be_bytes(*c)).collect();
         Some(Self { idx_path: idx_path.to_path_buf(), pack_path: idx_path.with_extension("pack"), fanout })
     }
 
