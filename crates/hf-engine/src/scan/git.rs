@@ -601,8 +601,21 @@ mod tests {
     fn reads_this_repository_when_available() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         if root.join(".git").exists() {
-            let info = read(&root, 5).expect("dépôt lisible");
-            assert!(!info.recent_subjects.is_empty(), "au moins le commit courant");
+            check_head_is_read(&root);
+        }
+    }
+
+    /// Le commit courant doit toujours être lisible. Une pull request est
+    /// extraite en CI comme un commit de fusion dans un clone superficiel :
+    /// les fusions sont ignorées et leurs parents manquent, la liste des
+    /// sujets est alors vide, ce qui est le comportement voulu.
+    fn check_head_is_read(root: &Path) {
+        let info = read(root, 5).expect("dépôt lisible");
+        let repo = Repo::discover(root).expect("dépôt lisible");
+        let head = repo.head().1.expect("HEAD résolu");
+        let commit = repo.commit(head).expect("commit courant lisible");
+        if commit.parents.len() <= 1 {
+            assert_eq!(info.recent_subjects.first(), Some(&commit.subject), "le commit courant en tête");
         }
     }
 }
