@@ -10,10 +10,10 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
-use reqwest::header::RANGE;
+use reqwest::header::{CONTENT_RANGE, RANGE};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
@@ -35,6 +35,10 @@ pub struct GatedConfig {
     pub use_system_proxy: bool,
     pub user_agent: String,
     pub connect_timeout: Duration,
+    /// Délai maximal sans recevoir le moindre octet. Sans lui, une connexion
+    /// coupée en silence (veille, Wi-Fi, NAT) laisse un téléchargement figé
+    /// pour toujours au lieu d'échouer et de pouvoir reprendre.
+    pub read_timeout: Duration,
     pub max_redirects: usize,
 }
 
@@ -45,6 +49,7 @@ impl Default for GatedConfig {
             use_system_proxy: true,
             user_agent: format!("HarnessForge/{}", env!("CARGO_PKG_VERSION")),
             connect_timeout: Duration::from_secs(30),
+            read_timeout: Duration::from_secs(60),
             max_redirects: 10,
         }
     }
@@ -138,7 +143,8 @@ impl GatedClient {
         let mut builder = reqwest::Client::builder()
             .redirect(redirect_policy)
             .user_agent(self.config.user_agent.clone())
-            .connect_timeout(self.config.connect_timeout);
+            .connect_timeout(self.config.connect_timeout)
+            .read_timeout(self.config.read_timeout);
         if !self.config.use_system_proxy {
             builder = builder.no_proxy();
         }
@@ -257,7 +263,15 @@ impl NetSession {
 
     /// Télécharge un fichier volumineux vers `dest`, en reprenant un éventuel
     /// fichier partiel (`<dest>.part`) et en vérifiant l'empreinte SHA-256.
-    /// Le fichier final n'apparaît qu'une fois vérifié.
+    /// Le fichier final n'apparaît qu'une fois complet et vérifié.
+    ///
+    /// L'empreinte est calculée au fil de la réception : une fois le dernier
+    /// octet reçu, il ne reste qu'à renommer le fichier. (Relire 22 Go après
+    /// coup prenait de quelques minutes à près d'une demi-heure en mode
+    /// développement, sans aucune indication à l'écran, le fichier restant en
+    /// `.part` pendant tout ce temps.)
+    /// Un transfert interrompu ou incomplet garde le fichier partiel pour
+    /// une reprise ; seul un fichier complet mais d'empreinte fausse est supprimé.
     pub async fn download(
         &self,
         url: &Url,
@@ -269,8 +283,13 @@ impl NetSession {
         if let Some(parent) = dest.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        let part = PathBuf::from(format!("{}.part", dest.display()));
+        let part = part_path(dest);
         let existing = tokio::fs::metadata(&part).await.map(|m| m.len()).unwrap_or(0);
+
+        // Reprise : on relit d'abord la partie déjà reçue pour l'empreinte,
+        // avant d'ouvrir la connexion (un serveur n'attend pas une minute).
+        let mut hasher =
+            if existing > 0 { hash_prefix(part.clone(), existing, progress).await? } else { Sha256::new() };
 
         let mut request = self.client.get(url.clone());
         if existing > 0 {
@@ -286,45 +305,81 @@ impl NetSession {
         };
         let status = response.status().as_u16();
 
-        let mut resumed = false;
+        let resumed = existing > 0 && matches!(status, 206 | 416);
         let mut downloaded: u64;
+        let total: Option<u64>;
         if status == 416 && existing > 0 {
             // Le fichier partiel est déjà complet : il reste à le vérifier.
             downloaded = existing;
-            resumed = true;
+            total = None;
         } else if response.status().is_success() {
-            let mut file = if status == 206 && existing > 0 {
-                resumed = true;
-                downloaded = existing;
-                tokio::fs::OpenOptions::new().append(true).open(&part).await?
-            } else {
-                downloaded = 0;
-                tokio::fs::File::create(&part).await?
-            };
-            let total = response.content_length().map(|len| len + downloaded);
-            progress(downloaded, total);
-            let mut stream = response.bytes_stream();
-            while let Some(chunk) = stream.next().await {
-                let chunk = match chunk {
-                    Ok(c) => c,
-                    Err(err) => {
-                        let err = NetError::from(err);
-                        file.flush().await?;
-                        self.log_request(url, Some(status), Some(downloaded), None, Some(err.code().into()))?;
+            let offset = if status == 206 && existing > 0 {
+                // Le serveur doit reprendre exactement là où le fichier s'arrête.
+                let range =
+                    response.headers().get(CONTENT_RANGE).and_then(|v| v.to_str().ok()).and_then(parse_content_range);
+                match range {
+                    Some((start, _)) if start == existing => existing,
+                    _ => {
+                        let _ = tokio::fs::remove_file(&part).await;
+                        let err = NetError::Http("unexpected Content-Range on resume".into());
+                        self.log_request(url, Some(status), None, None, Some(err.code().into()))?;
                         return Err(err);
                     }
-                };
-                file.write_all(&chunk).await?;
-                downloaded += chunk.len() as u64;
-                progress(downloaded, total);
+                }
+            } else {
+                0
+            };
+            let mut file = if offset > 0 {
+                tokio::fs::OpenOptions::new().append(true).open(&part).await?
+            } else {
+                // Réponse 200 : le serveur renvoie tout, on repart de zéro.
+                hasher = Sha256::new();
+                tokio::fs::File::create(&part).await?
+            };
+            downloaded = offset;
+            total = response.content_length().map(|len| len + offset);
+            let mut report = Throttled::new(progress, total);
+            report.now(downloaded);
+            let mut stream = response.bytes_stream();
+            let received: Result<(), NetError> = async {
+                while let Some(chunk) = stream.next().await {
+                    let chunk = chunk.map_err(interrupted)?;
+                    file.write_all(&chunk).await?;
+                    hasher.update(&chunk);
+                    downloaded += chunk.len() as u64;
+                    report.tick(downloaded);
+                }
+                file.flush().await?;
+                // Sur disque avant le renommage : pas de fichier final tronqué après une coupure.
+                file.sync_all().await?;
+                Ok(())
             }
-            file.flush().await?;
+            .await;
+            if received.is_err() {
+                // Ce qui a été reçu doit être sur le disque avant une reprise.
+                let _ = file.flush().await;
+            }
+            drop(file);
+            report.now(downloaded);
+            if let Err(err) = received {
+                self.log_request(url, Some(status), Some(downloaded), None, Some(err.code().into()))?;
+                return Err(err);
+            }
         } else {
             self.log_request(url, Some(status), None, None, None)?;
             return Err(NetError::Status { status, url: redact(url) });
         }
 
-        let actual = sha256_file(part.clone()).await?;
+        if let Some(total) = total
+            && downloaded < total
+        {
+            // Flux fermé avant la fin : ce qui a été reçu reste bon pour reprendre.
+            let err = NetError::Interrupted(format!("received {downloaded} of {total} bytes"));
+            self.log_request(url, Some(status), Some(downloaded), None, Some(err.code().into()))?;
+            return Err(err);
+        }
+
+        let actual = to_hex(&hasher.finalize());
         if let Some(expected) = expected_sha256
             && !actual.eq_ignore_ascii_case(expected.trim())
         {
@@ -336,6 +391,87 @@ impl NetSession {
         self.log_request(url, Some(status), Some(downloaded), expected_sha256.map(|_| true), None)?;
         Ok(DownloadReport { path: dest.to_path_buf(), bytes: downloaded, sha256: actual, resumed })
     }
+}
+
+/// Chemin du fichier partiel d'un téléchargement : `<dest>.part`.
+pub fn part_path(dest: &Path) -> PathBuf {
+    PathBuf::from(format!("{}.part", dest.display()))
+}
+
+/// Intervalle minimal entre deux notifications de progression : un modèle de
+/// 22 Go arrive en plus d'un million de blocs, autant de messages pour l'interface.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
+
+struct Throttled<'a> {
+    report: &'a (dyn Fn(u64, Option<u64>) + Send + Sync),
+    total: Option<u64>,
+    last: Instant,
+}
+
+impl<'a> Throttled<'a> {
+    fn new(report: &'a (dyn Fn(u64, Option<u64>) + Send + Sync), total: Option<u64>) -> Self {
+        Self { report, total, last: Instant::now() }
+    }
+
+    fn tick(&mut self, bytes: u64) {
+        if self.last.elapsed() >= PROGRESS_INTERVAL {
+            self.now(bytes);
+        }
+    }
+
+    fn now(&mut self, bytes: u64) {
+        (self.report)(bytes, self.total);
+        self.last = Instant::now();
+    }
+}
+
+/// Une erreur pendant la réception du corps est une interruption reprenable.
+fn interrupted(err: reqwest::Error) -> NetError {
+    match NetError::from(err) {
+        NetError::Http(kind) => NetError::Interrupted(kind),
+        other => other,
+    }
+}
+
+/// `bytes <début>-<fin>/<taille>` → (début, taille si connue).
+fn parse_content_range(value: &str) -> Option<(u64, Option<u64>)> {
+    let (range, size) = value.trim().strip_prefix("bytes ")?.split_once('/')?;
+    let (start, _) = range.split_once('-')?;
+    Some((start.trim().parse().ok()?, size.trim().parse().ok()))
+}
+
+/// Empreinte des `len` premiers octets d'un fichier partiel, pour poursuivre
+/// le calcul pendant la reprise. La relecture est signalée comme progression.
+async fn hash_prefix(
+    path: PathBuf,
+    len: u64,
+    progress: &(dyn Fn(u64, Option<u64>) + Send + Sync),
+) -> Result<Sha256, NetError> {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u64>();
+    let task = tokio::task::spawn_blocking(move || -> Result<Sha256, NetError> {
+        use std::io::Read;
+        let mut file = std::fs::File::open(&path)?.take(len);
+        let mut hasher = Sha256::new();
+        let mut buf = vec![0u8; 1 << 20];
+        let (mut done, mut last) = (0u64, Instant::now());
+        loop {
+            let n = file.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+            done += n as u64;
+            if last.elapsed() >= PROGRESS_INTERVAL {
+                let _ = tx.send(done);
+                last = Instant::now();
+            }
+        }
+        Ok(hasher)
+    });
+    while let Some(done) = rx.recv().await {
+        progress(done, None);
+    }
+    task.await.map_err(|_| NetError::Http("hashing task failed".into()))?
 }
 
 /// Empreinte SHA-256 d'un fichier, calculée par blocs hors du runtime async.

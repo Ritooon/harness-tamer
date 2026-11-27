@@ -23,6 +23,9 @@ pub enum NetError {
     ChecksumMismatch { expected: String, actual: String },
     #[error("HTTP error: {0}")]
     Http(String),
+    /// Transfert coupé avant la fin ; le fichier partiel est gardé pour reprendre.
+    #[error("{0}")]
+    Interrupted(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("invalid JSON: {0}")]
@@ -44,6 +47,7 @@ impl NetError {
             NetError::Status { .. } => "net.http_status",
             NetError::ChecksumMismatch { .. } => "net.checksum_mismatch",
             NetError::Http(_) => "net.http",
+            NetError::Interrupted(_) => "net.interrupted",
             NetError::Io(_) => "net.io",
             NetError::Json(_) => "net.json",
             NetError::PromptUnavailable => "net.prompt_unavailable",

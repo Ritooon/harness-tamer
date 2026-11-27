@@ -84,6 +84,50 @@ describe("SettingsPage", () => {
     expect(await screen.findByText(/Démarrage de llama.cpp avec le modèle m/)).toBeInTheDocument();
   });
 
+  it("garde un téléchargement en cours après un changement de page, sans en lancer un second", async () => {
+    const model = {
+      id: "m",
+      label: "Modèle M",
+      role: "light",
+      state: "partial",
+      bytes_on_disk: 1000,
+      size_bytes: 4000,
+      path: "/data/models/m.gguf",
+      imported: false,
+      min_memory_gb: 8,
+      notes: null,
+      license: null,
+    };
+    let progress: ((p: unknown) => void) | undefined;
+    let finish: (path: string) => void = () => undefined;
+    mockCommands({
+      ...base,
+      list_models: [model],
+      runtime_status: { state: "stopped" },
+      locate_runtime: { found: null, searched: [], install_target: null },
+      start_model_download: ({ onProgress }) => {
+        progress = (p) => (onProgress as { onmessage: (p: unknown) => void }).onmessage(p);
+        return new Promise<string>((resolve) => (finish = resolve));
+      },
+    });
+    const page = render(<SettingsPage settings={settings()} onSettings={() => undefined} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Reprendre…" }));
+    progress?.({ model_id: "m", bytes: 2000, total: 4000 });
+
+    // L'utilisateur va sur une autre page puis revient.
+    page.unmount();
+    render(<SettingsPage settings={settings()} onSettings={() => undefined} />);
+    expect(await screen.findByRole("button", { name: "Interrompre" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reprendre…" })).toBeNull();
+    expect(screen.getByLabelText("Modèle M")).toBeInTheDocument();
+    expect(callsOf("start_model_download")).toHaveLength(1);
+
+    finish("/data/models/m.gguf");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Interrompre" })).toBeNull());
+    // La liste est relue à la fin du téléchargement.
+    expect(callsOf("list_models").length).toBeGreaterThanOrEqual(3);
+  });
+
   it("montre le programme trouvé et permet d'en choisir un autre", async () => {
     const saved: unknown[] = [];
     mockCommands({
