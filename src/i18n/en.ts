@@ -104,6 +104,8 @@ export const en: Record<MessageKey, string> = {
   "agents.save": "Save version",
   "agents.note": "Version note (optional)",
   "agents.unsaved": "Unsaved changes",
+  "agents.up_to_date": "Up to date · version {number}",
+  "agents.up_to_date.hint": "No changes since version {number}. To save a new version, edit the text in Edit or Side by side mode.",
   "agents.edit": "Edit",
   "agents.preview": "Preview",
   "agents.split": "Side by side",
