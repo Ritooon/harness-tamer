@@ -279,3 +279,153 @@ async fn plain_http_is_refused_when_https_is_required() {
     assert!(matches!(client.begin(action).await.err().unwrap(), NetError::InsecureUrl(_)));
     assert_eq!(prompt.asked.load(Ordering::SeqCst), 0);
 }
+
+/// Serveur qui envoie une réponse brute puis, au choix, ferme la connexion ou
+/// la laisse ouverte sans plus rien envoyer (connexion « figée »).
+async fn serve_raw(head_and_body: Vec<u8>, hang: bool) -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else { break };
+            let raw = head_and_body.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let _ = socket.write_all(&raw).await;
+                if hang {
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                }
+                let _ = socket.shutdown().await;
+            });
+        }
+    });
+    addr
+}
+
+fn setup_with_read_timeout(timeout: std::time::Duration) -> Setup {
+    let dir = tempfile::tempdir().unwrap();
+    let journal = Arc::new(Journal::new(dir.path().join("network.log.jsonl")));
+    let prompt = Arc::new(FakePrompt { answer: Decision::Accepted, asked: AtomicUsize::new(0) });
+    let config =
+        GatedConfig { require_https: false, use_system_proxy: false, read_timeout: timeout, ..GatedConfig::default() };
+    let client = GatedClient::new(NetworkPolicy::Ask, prompt.clone(), Arc::clone(&journal), config);
+    Setup { client, prompt, journal, _dir: dir }
+}
+
+fn part_of(dest: &std::path::Path) -> std::path::PathBuf {
+    hf_net::part_path(dest)
+}
+
+#[tokio::test]
+async fn stalled_connection_fails_instead_of_hanging_and_keeps_the_partial_file() {
+    let mut raw = b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n".to_vec();
+    raw.extend_from_slice(&[1u8; 30_000]);
+    let addr = serve_raw(raw, true).await;
+    let s = setup_with_read_timeout(std::time::Duration::from_millis(500));
+    let url = Url::parse(&format!("http://{addr}/model.gguf")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("model.gguf");
+    let session = s.client.begin(action_for(addr, "/model.gguf")).await.unwrap();
+
+    let started = std::time::Instant::now();
+    let err = session.download(&url, &dest, Some(&"0".repeat(64)), &|_, _| {}).await.err().unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(10), "le délai d'inactivité coupe la connexion figée");
+    assert!(matches!(err, NetError::Interrupted(_)), "{err:?}");
+    assert_eq!(std::fs::metadata(part_of(&dest)).unwrap().len(), 30_000, "la partie reçue est gardée");
+    assert!(!dest.exists());
+    let last = &s.journal.read_recent(1).unwrap()[0];
+    assert_eq!((last.event, last.error.as_deref()), (JournalEvent::Request, Some("net.interrupted")));
+}
+
+#[tokio::test]
+async fn early_close_is_resumable_not_corrupt() {
+    let mut raw = b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\nConnection: close\r\n\r\n".to_vec();
+    raw.extend_from_slice(&[1u8; 40_000]);
+    let addr = serve_raw(raw, false).await;
+    let s = setup(NetworkPolicy::Ask, Decision::Accepted);
+    let url = Url::parse(&format!("http://{addr}/model.gguf")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("model.gguf");
+    let session = s.client.begin(action_for(addr, "/model.gguf")).await.unwrap();
+    let err = session.download(&url, &dest, Some(&"0".repeat(64)), &|_, _| {}).await.err().unwrap();
+    assert!(matches!(err, NetError::Interrupted(_)), "{err:?}");
+    // Avant : fichier partiel jugé « corrompu » et supprimé, ou laissé sans explication.
+    assert_eq!(std::fs::metadata(part_of(&dest)).unwrap().len(), 40_000);
+}
+
+#[tokio::test]
+async fn complete_partial_file_is_verified_and_renamed() {
+    let content: Arc<Vec<u8>> = Arc::new((0..120_000u32).map(|i| (i % 13) as u8).collect());
+    let (addr, hits) = serve(file_handler(Arc::clone(&content))).await;
+    let s = setup(NetworkPolicy::Ask, Decision::Accepted);
+    let url = Url::parse(&format!("http://{addr}/model.gguf")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("model.gguf");
+    // Cas d'une application fermée pendant l'ancienne vérification finale.
+    std::fs::write(part_of(&dest), &*content).unwrap();
+    let session = s.client.begin(action_for(addr, "/model.gguf")).await.unwrap();
+    let report = session.download(&url, &dest, Some(&sha256_hex(&content)), &|_, _| {}).await.unwrap();
+    assert!(report.resumed);
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+    assert_eq!(std::fs::read(&dest).unwrap(), *content);
+    assert!(!part_of(&dest).exists());
+}
+
+#[tokio::test]
+async fn server_ignoring_range_restarts_from_zero() {
+    let content: Arc<Vec<u8>> = Arc::new((0..80_000u32).map(|i| (i % 7) as u8).collect());
+    let (addr, _) = serve(Arc::new({
+        let content = Arc::clone(&content);
+        move |_: &Req| Resp::ok(&content)
+    }))
+    .await;
+    let s = setup(NetworkPolicy::Ask, Decision::Accepted);
+    let url = Url::parse(&format!("http://{addr}/model.gguf")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("model.gguf");
+    std::fs::write(part_of(&dest), b"garbage that is not the start").unwrap();
+    let session = s.client.begin(action_for(addr, "/model.gguf")).await.unwrap();
+    let report = session.download(&url, &dest, Some(&sha256_hex(&content)), &|_, _| {}).await.unwrap();
+    assert!(!report.resumed);
+    assert_eq!(std::fs::read(&dest).unwrap(), *content);
+}
+
+#[tokio::test]
+async fn resume_at_the_wrong_offset_is_refused() {
+    let (addr, _) = serve(Arc::new(|_: &Req| Resp {
+        status: 206,
+        headers: vec![("Content-Range".into(), "bytes 0-9/10".into())],
+        body: vec![0u8; 10],
+    }))
+    .await;
+    let s = setup(NetworkPolicy::Ask, Decision::Accepted);
+    let url = Url::parse(&format!("http://{addr}/model.gguf")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("model.gguf");
+    std::fs::write(part_of(&dest), [9u8; 5]).unwrap();
+    let session = s.client.begin(action_for(addr, "/model.gguf")).await.unwrap();
+    assert!(session.download(&url, &dest, None, &|_, _| {}).await.is_err());
+    assert!(!dest.exists(), "aucun fichier mélangé n'est rendu visible");
+    assert!(!part_of(&dest).exists(), "la prochaine tentative repart de zéro");
+}
+
+#[tokio::test]
+async fn progress_ends_on_the_full_size() {
+    let content: Arc<Vec<u8>> = Arc::new(vec![3u8; 300_000]);
+    let (addr, _) = serve(file_handler(Arc::clone(&content))).await;
+    let s = setup(NetworkPolicy::Ask, Decision::Accepted);
+    let url = Url::parse(&format!("http://{addr}/model.gguf")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("model.gguf");
+    let seen = std::sync::Mutex::new(Vec::new());
+    let session = s.client.begin(action_for(addr, "/model.gguf")).await.unwrap();
+    session
+        .download(&url, &dest, Some(&sha256_hex(&content)), &|b, t| seen.lock().unwrap().push((b, t)))
+        .await
+        .unwrap();
+    let seen = seen.into_inner().unwrap();
+    assert_eq!(seen.first(), Some(&(0, Some(300_000))));
+    assert_eq!(seen.last(), Some(&(300_000, Some(300_000))));
+    assert!(seen.len() <= 4, "la progression est espacée, pas envoyée à chaque bloc : {}", seen.len());
+}

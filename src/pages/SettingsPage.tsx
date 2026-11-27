@@ -11,8 +11,9 @@ import { Banner, Button, Empty, Field, Progress } from "../components/ui";
 import { useI18n, type Translate } from "../i18n";
 import type { MessageKey } from "../i18n/fr";
 import { api } from "../lib/api";
+import { startModelDownload, useModelDownloads } from "../lib/downloads";
 import { formatBytes, formatDate } from "../lib/format";
-import type { DownloadProgress, JournalEntry, RuntimeLocation, RuntimeStatus, SystemInfo } from "../lib/types";
+import type { JournalEntry, RuntimeLocation, RuntimeStatus, SystemInfo } from "../lib/types";
 
 type Props = { settings: Settings; onSettings: (s: Settings) => void };
 
@@ -98,7 +99,10 @@ function Models({ settings, save, onError }: SectionProps) {
   const { t, lang, err } = useI18n();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [models, setModels] = useState<ModelStatus[]>([]);
-  const [progress, setProgress] = useState<Record<string, DownloadProgress>>({});
+  const progress = useModelDownloads();
+  // Recharger l'état des modèles à chaque début ou fin de téléchargement,
+  // y compris quand il se termine pendant qu'on était sur une autre page.
+  const runningIds = Object.keys(progress).sort().join(" ");
 
   const reload = useCallback(() => {
     api
@@ -109,21 +113,17 @@ function Models({ settings, save, onError }: SectionProps) {
 
   useEffect(() => {
     api.systemInfo().then(setInfo).catch(() => setInfo(null));
+  }, []);
+
+  useEffect(() => {
     reload();
-  }, [reload]);
+  }, [reload, runningIds]);
 
   const download = async (id: string) => {
-    setProgress((p) => ({ ...p, [id]: { model_id: id, bytes: 0, total: null } }));
     try {
-      await api.startModelDownload(id, (event) => setProgress((p) => ({ ...p, [id]: event })));
+      await startModelDownload(id);
     } catch (e) {
       onError?.(err(e));
-    } finally {
-      setProgress((p) => {
-        const { [id]: _, ...rest } = p;
-        return rest;
-      });
-      reload();
     }
   };
 

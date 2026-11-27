@@ -71,14 +71,23 @@ pub async fn start_model_download(
     let library = state.library();
     let lang = state.settings().ui_language;
     let id = model_id.clone();
-    let task = tokio::spawn(async move {
-        let progress = |bytes: u64, total: Option<u64>| {
-            let _ = on_progress.send(DownloadProgress { model_id: id.clone(), bytes, total });
-        };
-        download_model(&gated, &library, &id, lang, &progress).await
-    });
-    // La poignée d'annulation est conservée le temps du téléchargement.
-    state.downloads.lock().unwrap_or_else(|p| p.into_inner()).insert(model_id.clone(), task.abort_handle());
+    let task = {
+        // Un seul téléchargement par modèle : deux tâches qui écrivent dans le
+        // même `.part` le rendraient inutilisable.
+        let mut downloads = state.downloads.lock().unwrap_or_else(|p| p.into_inner());
+        if downloads.contains_key(&model_id) {
+            return Err(CmdError::new("download.running", model_id));
+        }
+        let task = tokio::spawn(async move {
+            let progress = |bytes: u64, total: Option<u64>| {
+                let _ = on_progress.send(DownloadProgress { model_id: id.clone(), bytes, total });
+            };
+            download_model(&gated, &library, &id, lang, &progress).await
+        });
+        // La poignée d'annulation est conservée le temps du téléchargement.
+        downloads.insert(model_id.clone(), task.abort_handle());
+        task
+    };
     let outcome = task.await;
     state.downloads.lock().unwrap_or_else(|p| p.into_inner()).remove(&model_id);
     match outcome {
@@ -89,9 +98,11 @@ pub async fn start_model_download(
 }
 
 /// Interrompt un téléchargement ; le fichier `.part` permet de reprendre.
+/// L'entrée n'est retirée qu'à la fin réelle de la tâche (voir
+/// `start_model_download`), pour qu'une reprise ne la chevauche jamais.
 #[tauri::command]
 pub fn cancel_model_download(state: State<'_, AppState>, model_id: String) {
-    if let Some(handle) = state.downloads.lock().unwrap_or_else(|p| p.into_inner()).remove(&model_id) {
+    if let Some(handle) = state.downloads.lock().unwrap_or_else(|p| p.into_inner()).get(&model_id) {
         handle.abort();
     }
 }

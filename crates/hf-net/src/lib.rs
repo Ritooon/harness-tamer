@@ -29,7 +29,7 @@ pub use consent::{
     ActionKind, ConsentPrompt, ConsentText, Decision, NetAction, host_allowed, human_size, render_consent,
 };
 pub use error::NetError;
-pub use gated::{DownloadReport, GatedClient, GatedConfig, NetSession, sha256_file};
+pub use gated::{DownloadReport, GatedClient, GatedConfig, NetSession, part_path, sha256_file};
 pub use journal::{Journal, JournalDecision, JournalEntry, JournalEvent};
 pub use loopback::{LoopbackClient, free_loopback_port};
 pub use policy::NetworkPolicy;

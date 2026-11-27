@@ -32,3 +32,9 @@ disallowed_methods = "deny"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# Même en `pnpm tauri dev`, l'empreinte SHA-256 des modèles (plusieurs dizaines
+# de Go) doit être calculée à pleine vitesse : sans optimisation, sha2 plafonne
+# vers 15 Mo/s et limiterait le téléchargement à ce débit.
+[profile.dev.package.sha2]
+opt-level = 3

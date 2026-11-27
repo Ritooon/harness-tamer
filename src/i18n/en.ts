@@ -329,4 +329,7 @@ export const en: Record<MessageKey, string> = {
   "error.net.checksum_mismatch": "The downloaded file is corrupt (wrong SHA-256). It was deleted.",
   "error.net.http_status": "The server answered with an error: {message}",
   "error.net.http": "Network error: {message}",
+  "error.net.interrupted": "The download was interrupted ({message}). What was already received is kept: “Resume…” will finish it.",
+  "error.net.io": "Could not write the downloaded file (disk full or folder unavailable?): {message}",
+  "error.download.running": "This model is already downloading.",
 };

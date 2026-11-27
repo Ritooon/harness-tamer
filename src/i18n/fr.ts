@@ -327,6 +327,9 @@ export const fr = {
   "error.net.checksum_mismatch": "Le fichier téléchargé est corrompu (empreinte SHA-256 incorrecte). Il a été supprimé.",
   "error.net.http_status": "Le serveur a répondu par une erreur : {message}",
   "error.net.http": "Erreur réseau : {message}",
+  "error.net.interrupted": "Le téléchargement s'est interrompu ({message}). La partie déjà reçue est conservée : « Reprendre… » le terminera.",
+  "error.net.io": "Impossible d'écrire le fichier téléchargé (disque plein ou dossier inaccessible ?) : {message}",
+  "error.download.running": "Ce modèle est déjà en cours de téléchargement.",
 };
 
 export type MessageKey = keyof typeof fr;
